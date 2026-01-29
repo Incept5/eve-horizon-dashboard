@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthContext } from '../contexts/AuthContext';
 import { Badge } from './ui/Badge';
+import { ProjectSwitcher } from './ProjectSwitcher';
 
 interface NavItem {
   path: string;
@@ -50,11 +51,9 @@ export function Layout({ children }: { children: React.ReactNode }) {
             <h1 className="text-xl font-bold text-eve-200">Eve Horizon</h1>
           </div>
 
-          {/* Project Switcher Placeholder */}
+          {/* Project Switcher */}
           <div className="flex items-center gap-3">
-            <div className="px-4 py-2 bg-eve-800 rounded-lg border border-eve-700 hover:border-eve-600 transition-colors cursor-pointer">
-              <span className="text-eve-300 text-sm">Project: horizon-core ▾</span>
-            </div>
+            <ProjectSwitcher />
           </div>
         </div>
       </header>

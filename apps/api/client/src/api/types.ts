@@ -106,3 +106,19 @@ export interface UpdateJobRequest {
   issue_type?: IssueType;
   assignee_id?: number | null;
 }
+
+export interface Member {
+  id: number;
+  email: string;
+  role: 'admin' | 'member';
+  org_id: number;
+  created_at?: string;
+}
+
+export interface SystemEvent {
+  id: number;
+  type: string;
+  message: string;
+  created_at: string;
+  metadata?: Record<string, unknown>;
+}
