@@ -1,0 +1,3 @@
+# Eve Starter Skills
+# Install eve-se skills for building Eve-compatible projects
+https://github.com/incept5/eve-skillpacks

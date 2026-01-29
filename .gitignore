@@ -1,0 +1,8 @@
+.agent/skills/
+.claude/skills/
+.code/
+node_modules/
+.env
+.eve-horizon.yaml
+*.local
+.DS_Store
