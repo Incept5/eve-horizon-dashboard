@@ -1,9 +1,11 @@
 import fs from 'fs/promises';
 import http from 'http';
+import https from 'https';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const PORT = process.env.PORT || 3000;
+const EVE_API_URL = process.env.EVE_API_URL || 'http://api.eve.lvh.me';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.join(__dirname, 'dist');
@@ -114,6 +116,57 @@ const serveIndexHtml = async (res) => {
   }
 };
 
+// Proxy requests to Eve API
+const proxyToEveApi = (req, res, apiPath) => {
+  const targetUrl = new URL(apiPath, EVE_API_URL);
+
+  // Copy query params
+  const reqUrl = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
+  targetUrl.search = reqUrl.search;
+
+  const options = {
+    hostname: targetUrl.hostname,
+    port: targetUrl.port || (targetUrl.protocol === 'https:' ? 443 : 80),
+    path: targetUrl.pathname + targetUrl.search,
+    method: req.method,
+    headers: {
+      'Content-Type': 'application/json',
+    },
+  };
+
+  // Forward Authorization header if present
+  if (req.headers.authorization) {
+    options.headers['Authorization'] = req.headers.authorization;
+  }
+
+  const protocol = targetUrl.protocol === 'https:' ? https : http;
+
+  const proxyReq = protocol.request(options, (proxyRes) => {
+    res.statusCode = proxyRes.statusCode;
+
+    // Forward response headers
+    Object.keys(proxyRes.headers).forEach((key) => {
+      if (key.toLowerCase() !== 'transfer-encoding') {
+        res.setHeader(key, proxyRes.headers[key]);
+      }
+    });
+
+    proxyRes.pipe(res);
+  });
+
+  proxyReq.on('error', (err) => {
+    console.error('Proxy error:', err.message);
+    sendJson(res, 502, { error: 'Failed to connect to Eve API', details: err.message });
+  });
+
+  // Forward request body for POST/PUT/PATCH
+  if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+    req.pipe(proxyReq);
+  } else {
+    proxyReq.end();
+  }
+};
+
 export const createServer = () =>
   http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
@@ -131,11 +184,11 @@ export const createServer = () =>
       return;
     }
 
-    // BFF API routes - will proxy to Eve API in the future
+    // BFF API routes - proxy to Eve API
     if (pathname.startsWith('/api/')) {
-      // Placeholder for BFF proxy routes
-      // TODO: Implement proxy to Eve API
-      sendJson(res, 501, { error: 'API proxy not yet implemented' });
+      // Strip /api prefix and proxy to Eve API
+      const apiPath = pathname.replace(/^\/api/, '');
+      proxyToEveApi(req, res, apiPath);
       return;
     }
 

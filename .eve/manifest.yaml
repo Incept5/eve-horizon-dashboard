@@ -33,6 +33,7 @@ services:
     ports: [3000]
     environment:
       NODE_ENV: production
+      # EVE_API_URL, EVE_PROJECT_ID, EVE_ORG_ID, EVE_ENV_NAME are auto-injected by Eve
     healthcheck:
       test: curl -f http://localhost:3000/health || exit 1
     x-eve:
