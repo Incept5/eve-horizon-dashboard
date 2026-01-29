@@ -1,28 +1,61 @@
-# Eve Horizon Starter - Agent Instructions
+# Eve Horizon Dashboard - Agent Instructions
 
-This is an Eve-compatible starter project. Agents working in this repo should follow these guidelines.
+This is the Eve Horizon Dashboard, a web UI for managing Eve Horizon projects, jobs, pipelines, and deployments. Agents working in this repo should follow these guidelines.
 
 ## Project Overview
 
-- **Purpose**: Minimal starter template for Eve-compatible projects
-- **Stack**: Staging-first Eve Horizon with Docker Compose for local dev
+- **Purpose**: Web UI for Eve Horizon - manage projects, jobs, pipelines, deployments, and system operations
+- **Stack**: React 18 + Vite 5 + Tailwind 3 + TypeScript + React Query 5 + React Router 6
+- **Architecture**: BFF (Backend for Frontend) pattern - Express server serves SPA and proxies `/api/*` to Eve API
 - **Skills**: eve-se skillpack installed via `eve init` or `eve skills install`
 
-Local dev runs via Docker Compose and is then translated into `.eve/manifest.yaml` for deployment to the remote staging cluster.
+The dashboard provides a comprehensive interface for Eve Horizon operations:
+- Projects: Browse and manage Eve projects
+- Jobs: Monitor job execution and status
+- Pipelines: View and trigger pipelines
+- Environments: Manage deployments across environments
+- Board: Visual workflow management
+- Epics: Track large initiatives
+- Review: Code review queue
+- System: System-level administration
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `.eve/manifest.yaml` | Deployment configuration (services, envs) |
+| `apps/api/client/` | React SPA source code |
+| `apps/api/client/src/components/` | UI components (Layout, ui primitives) |
+| `apps/api/client/src/components/ui/` | Reusable UI primitives (Button, Card, Badge, etc.) |
+| `apps/api/client/src/pages/` | Route pages (Projects, Jobs, Pipelines, Environments, Board, Epics, Review, System) |
+| `apps/api/client/src/api/` | API client and TypeScript types |
+| `apps/api/client/src/hooks/` | React Query hooks for data fetching |
+| `apps/api/index.js` | Express server (BFF) - serves SPA and proxies API calls |
+| `apps/api/Dockerfile` | Multi-stage Docker build (client build + server runtime) |
+| `.eve/manifest.yaml` | Eve deployment configuration (services, envs) |
 | `skills.txt` | Skill sources for agents |
 | `.eve/hooks/on-clone.sh` | Auto-installs skills when Eve workers clone |
-| `apps/api/` | Example API service |
-| `scripts/` | Helper scripts for setup and deploy |
 
 ## Common Tasks
 
-### Local dev (Docker Compose)
+### Local dev (React SPA only)
+```bash
+cd apps/api/client
+npm run dev          # http://localhost:5173 (Vite dev server)
+```
+
+### Build the SPA
+```bash
+cd apps/api/client
+npm run build        # Output to apps/api/client/dist/
+```
+
+### Run the Express server (serves built SPA + API proxy)
+```bash
+cd apps/api
+node index.js        # http://localhost:3000
+```
+
+### Local dev (Full stack via Docker Compose)
 ```bash
 docker compose up --build   # http://localhost:3000
 ```
@@ -64,11 +97,6 @@ eve env deploy staging --ref abc123 --inputs '{"release_id":"rel_xxx"}'
 eve env status staging
 ```
 
-### Add a new service
-1. Add Dockerfile in `apps/<name>/`
-2. Add service to `.eve/manifest.yaml`
-3. Deploy: `eve env deploy staging --ref main` or `eve pipeline run deploy --env staging`
-
 ## Skills Available
 
 Skills are installed automatically by `eve init`. Key skills:
@@ -82,19 +110,38 @@ Run `openskills list` to see all installed skills.
 
 ## Development Workflow
 
-1. Make changes to code
+### For UI Development
+1. Make changes to React components in `apps/api/client/src/`
+2. Test locally: `cd apps/api/client && npm run dev` (hot reload)
+3. Build: `cd apps/api/client && npm run build`
+4. Test production build: `cd apps/api && node index.js`
+5. Deploy: `eve env deploy staging --ref main` (or use `eve pipeline run deploy --env staging`)
+6. Verify: `eve env status staging`
+
+### For API/BFF Changes
+1. Make changes to `apps/api/index.js`
 2. Test locally: `docker compose up --build`
 3. Deploy: `eve env deploy staging --ref main` (or use `eve pipeline run deploy --env staging`)
 4. Verify: `eve env status staging`
 
-## Keep AGENTS.md Current (Critical)
+## Architecture Notes
 
-This file must be rewritten to match the actual product domain and tech stack once the user decides what they are building. The starter API/UI is disposable: expect to replace or remove it entirely. When the real project direction is chosen, document:
+### BFF Pattern
+The Express server (`apps/api/index.js`) implements the Backend for Frontend pattern:
+- Serves the built React SPA from `apps/api/client/dist/`
+- Proxies `/api/*` requests to the Eve API backend
+- Handles authentication, session management, and request transformation
+- Provides a single deployment unit for the entire dashboard
 
-- The domain and core product goals.
-- The chosen stack and architecture.
-- What starter code was removed or replaced, and what (if anything) was kept.
-- The new local dev and deploy workflow.
+### Multi-stage Docker Build
+The `apps/api/Dockerfile` uses multi-stage builds:
+1. **Stage 1**: Build React SPA with Node + Vite
+2. **Stage 2**: Runtime image with Node + Express + built SPA
+
+### React Query + API Layer
+- API client in `apps/api/client/src/api/` defines TypeScript types and API functions
+- React Query hooks in `apps/api/client/src/hooks/` manage server state, caching, and refetching
+- Components consume hooks for declarative data fetching with loading/error states
 
 <skills_system priority="1">
 

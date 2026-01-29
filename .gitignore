@@ -6,3 +6,7 @@ node_modules/
 .eve-horizon.yaml
 *.local
 .DS_Store
+secrets.env
+!secrets.env.exampleapps/api/dist/
+
+apps/api/client/dist/

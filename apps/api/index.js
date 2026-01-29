@@ -5,18 +5,15 @@ import { fileURLToPath } from 'url';
 
 const PORT = process.env.PORT || 3000;
 
-const store = {
-  nextId: 1,
-  todos: new Map(),
-};
-
-const PUBLIC_DIR = path.join(path.dirname(fileURLToPath(import.meta.url)), 'public');
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const DIST_DIR = path.join(__dirname, 'dist');
 
 const openapi = {
   openapi: '3.0.0',
   info: {
-    title: 'Eve Starter Todos API',
+    title: 'Eve Horizon Dashboard API',
     version: '1.0.0',
+    description: 'BFF API for Eve Horizon Dashboard',
   },
   paths: {
     '/health': {
@@ -25,146 +22,27 @@ const openapi = {
         responses: {
           '200': {
             description: 'OK',
-          },
-        },
-      },
-    },
-    '/todos': {
-      get: {
-        summary: 'List todos',
-        responses: {
-          '200': {
-            description: 'List of todos',
             content: {
               'application/json': {
                 schema: {
-                  type: 'array',
-                  items: { $ref: '#/components/schemas/Todo' },
+                  type: 'object',
+                  properties: {
+                    status: { type: 'string' },
+                  },
                 },
               },
             },
           },
         },
       },
-      post: {
-        summary: 'Create todo',
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: { $ref: '#/components/schemas/TodoCreate' },
-            },
-          },
-        },
-        responses: {
-          '201': {
-            description: 'Created',
-            content: {
-              'application/json': {
-                schema: { $ref: '#/components/schemas/Todo' },
-              },
-            },
-          },
-          '400': { description: 'Invalid input' },
-        },
-      },
     },
-    '/todos/{id}': {
+    '/api/v1/projects': {
       get: {
-        summary: 'Get todo',
-        parameters: [
-          {
-            name: 'id',
-            in: 'path',
-            required: true,
-            schema: { type: 'integer' },
-          },
-        ],
+        summary: 'List projects (BFF proxy to Eve API)',
         responses: {
           '200': {
-            description: 'Todo',
-            content: {
-              'application/json': {
-                schema: { $ref: '#/components/schemas/Todo' },
-              },
-            },
+            description: 'List of projects',
           },
-          '404': { description: 'Not found' },
-        },
-      },
-      patch: {
-        summary: 'Update todo',
-        parameters: [
-          {
-            name: 'id',
-            in: 'path',
-            required: true,
-            schema: { type: 'integer' },
-          },
-        ],
-        requestBody: {
-          required: true,
-          content: {
-            'application/json': {
-              schema: { $ref: '#/components/schemas/TodoUpdate' },
-            },
-          },
-        },
-        responses: {
-          '200': {
-            description: 'Updated',
-            content: {
-              'application/json': {
-                schema: { $ref: '#/components/schemas/Todo' },
-              },
-            },
-          },
-          '400': { description: 'Invalid input' },
-          '404': { description: 'Not found' },
-        },
-      },
-      delete: {
-        summary: 'Delete todo',
-        parameters: [
-          {
-            name: 'id',
-            in: 'path',
-            required: true,
-            schema: { type: 'integer' },
-          },
-        ],
-        responses: {
-          '204': { description: 'Deleted' },
-          '404': { description: 'Not found' },
-        },
-      },
-    },
-  },
-  components: {
-    schemas: {
-      Todo: {
-        type: 'object',
-        properties: {
-          id: { type: 'integer' },
-          title: { type: 'string' },
-          completed: { type: 'boolean' },
-          createdAt: { type: 'string', format: 'date-time' },
-          updatedAt: { type: 'string', format: 'date-time' },
-        },
-        required: ['id', 'title', 'completed', 'createdAt', 'updatedAt'],
-      },
-      TodoCreate: {
-        type: 'object',
-        properties: {
-          title: { type: 'string' },
-        },
-        required: ['title'],
-      },
-      TodoUpdate: {
-        type: 'object',
-        properties: {
-          title: { type: 'string' },
-          completed: { type: 'boolean' },
         },
       },
     },
@@ -175,11 +53,6 @@ const sendJson = (res, statusCode, payload) => {
   res.statusCode = statusCode;
   res.setHeader('Content-Type', 'application/json');
   res.end(JSON.stringify(payload));
-};
-
-const sendEmpty = (res, statusCode) => {
-  res.statusCode = statusCode;
-  res.end();
 };
 
 const contentTypeFor = (filePath) => {
@@ -195,10 +68,17 @@ const contentTypeFor = (filePath) => {
       return 'image/svg+xml';
     case '.png':
       return 'image/png';
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg';
     case '.ico':
       return 'image/x-icon';
     case '.json':
       return 'application/json; charset=utf-8';
+    case '.woff':
+      return 'font/woff';
+    case '.woff2':
+      return 'font/woff2';
     default:
       return 'application/octet-stream';
   }
@@ -226,189 +106,57 @@ const serveStatic = async (res, filePath) => {
   }
 };
 
-const readJsonBody = async (req) => {
-  let raw = '';
-  for await (const chunk of req) {
-    raw += chunk;
+const serveIndexHtml = async (res) => {
+  const indexPath = path.join(DIST_DIR, 'index.html');
+  const served = await serveStatic(res, indexPath);
+  if (!served) {
+    sendJson(res, 404, { error: 'SPA not built. Run npm run build:client first.' });
   }
-  if (!raw) {
-    return { ok: true, value: null };
-  }
-  try {
-    return { ok: true, value: JSON.parse(raw) };
-  } catch {
-    return { ok: false, value: null };
-  }
-};
-
-const parseId = (segment) => {
-  const id = Number(segment);
-  if (!Number.isInteger(id) || id < 1) {
-    return null;
-  }
-  return id;
-};
-
-const listTodos = () => Array.from(store.todos.values());
-
-const createTodo = (title) => {
-  const now = new Date().toISOString();
-  const todo = {
-    id: store.nextId,
-    title,
-    completed: false,
-    createdAt: now,
-    updatedAt: now,
-  };
-  store.todos.set(store.nextId, todo);
-  store.nextId += 1;
-  return todo;
-};
-
-const updateTodo = (todo, patch) => {
-  const now = new Date().toISOString();
-  const next = {
-    ...todo,
-    ...patch,
-    updatedAt: now,
-  };
-  store.todos.set(todo.id, next);
-  return next;
-};
-
-const handleTodosCollection = async (req, res) => {
-  if (req.method === 'GET') {
-    sendJson(res, 200, listTodos());
-    return;
-  }
-
-  if (req.method === 'POST') {
-    const body = await readJsonBody(req);
-    if (!body.ok || !body.value || typeof body.value.title !== 'string') {
-      sendJson(res, 400, { error: 'Invalid JSON body. "title" is required.' });
-      return;
-    }
-    const title = body.value.title.trim();
-    if (!title) {
-      sendJson(res, 400, { error: '"title" cannot be empty.' });
-      return;
-    }
-    const todo = createTodo(title);
-    sendJson(res, 201, todo);
-    return;
-  }
-
-  res.statusCode = 405;
-  res.setHeader('Allow', 'GET, POST');
-  res.end();
-};
-
-const handleTodoItem = async (req, res, id) => {
-  const todo = store.todos.get(id);
-  if (!todo) {
-    sendJson(res, 404, { error: 'Todo not found.' });
-    return;
-  }
-
-  if (req.method === 'GET') {
-    sendJson(res, 200, todo);
-    return;
-  }
-
-  if (req.method === 'PATCH') {
-    const body = await readJsonBody(req);
-    if (!body.ok || !body.value) {
-      sendJson(res, 400, { error: 'Invalid JSON body.' });
-      return;
-    }
-
-    const { title, completed } = body.value;
-    const updates = {};
-    if (title !== undefined) {
-      if (typeof title !== 'string' || !title.trim()) {
-        sendJson(res, 400, { error: '"title" must be a non-empty string.' });
-        return;
-      }
-      updates.title = title.trim();
-    }
-    if (completed !== undefined) {
-      if (typeof completed !== 'boolean') {
-        sendJson(res, 400, { error: '"completed" must be a boolean.' });
-        return;
-      }
-      updates.completed = completed;
-    }
-
-    if (Object.keys(updates).length === 0) {
-      sendJson(res, 400, { error: 'No valid fields to update.' });
-      return;
-    }
-
-    const next = updateTodo(todo, updates);
-    sendJson(res, 200, next);
-    return;
-  }
-
-  if (req.method === 'DELETE') {
-    store.todos.delete(id);
-    sendEmpty(res, 204);
-    return;
-  }
-
-  res.statusCode = 405;
-  res.setHeader('Allow', 'GET, PATCH, DELETE');
-  res.end();
 };
 
 export const createServer = () =>
   http.createServer(async (req, res) => {
     const url = new URL(req.url, `http://${req.headers.host || 'localhost'}`);
-    const path = url.pathname;
+    const pathname = url.pathname;
 
-    if (req.method === 'GET' && path === '/health') {
+    // Health check endpoint
+    if (req.method === 'GET' && pathname === '/health') {
       sendJson(res, 200, { status: 'ok' });
       return;
     }
 
-    if (req.method === 'GET' && path === '/openapi.json') {
+    // OpenAPI spec
+    if (req.method === 'GET' && pathname === '/openapi.json') {
       sendJson(res, 200, openapi);
       return;
     }
 
-    if (path === '/todos') {
-      await handleTodosCollection(req, res);
+    // BFF API routes - will proxy to Eve API in the future
+    if (pathname.startsWith('/api/')) {
+      // Placeholder for BFF proxy routes
+      // TODO: Implement proxy to Eve API
+      sendJson(res, 501, { error: 'API proxy not yet implemented' });
       return;
     }
 
-    if (path.startsWith('/todos/')) {
-      const [, , idSegment, ...rest] = path.split('/');
-      if (rest.length > 0) {
-        sendJson(res, 404, { error: 'Not Found' });
-        return;
-      }
-      const id = parseId(idSegment);
-      if (!id) {
-        sendJson(res, 400, { error: 'Invalid todo id.' });
-        return;
-      }
-      await handleTodoItem(req, res, id);
-      return;
-    }
-
+    // Static file serving for SPA
     if (req.method === 'GET') {
-      const isRoot = path === '/';
+      // Check if requesting a static asset
       const isAsset =
-        path.startsWith('/assets/') ||
-        path.endsWith('.js') ||
-        path.endsWith('.css') ||
-        path.endsWith('.svg') ||
-        path.endsWith('.png') ||
-        path.endsWith('.ico') ||
-        path.endsWith('.json');
+        pathname.startsWith('/assets/') ||
+        pathname.endsWith('.js') ||
+        pathname.endsWith('.css') ||
+        pathname.endsWith('.svg') ||
+        pathname.endsWith('.png') ||
+        pathname.endsWith('.jpg') ||
+        pathname.endsWith('.jpeg') ||
+        pathname.endsWith('.ico') ||
+        pathname.endsWith('.json') ||
+        pathname.endsWith('.woff') ||
+        pathname.endsWith('.woff2');
 
-      if (isRoot || isAsset) {
-        const requestPath = isRoot ? 'index.html' : path.slice(1);
-        const filePath = safeJoin(PUBLIC_DIR, requestPath);
+      if (isAsset) {
+        const filePath = safeJoin(DIST_DIR, pathname.slice(1));
         if (filePath && (await serveStatic(res, filePath))) {
           return;
         }
@@ -416,24 +164,19 @@ export const createServer = () =>
         return;
       }
 
-      const fallbackPath = safeJoin(PUBLIC_DIR, 'index.html');
-      if (fallbackPath && (await serveStatic(res, fallbackPath))) {
-        return;
-      }
+      // For all other GET requests, serve index.html (SPA client-side routing)
+      await serveIndexHtml(res);
+      return;
     }
 
     sendJson(res, 404, { error: 'Not Found' });
   });
 
-export const resetStore = () => {
-  store.nextId = 1;
-  store.todos = new Map();
-};
-
 const startServer = () => {
   const server = createServer();
   server.listen(PORT, () => {
-    console.log(`Eve Starter API listening on port ${PORT}`);
+    console.log(`Eve Horizon Dashboard API listening on port ${PORT}`);
+    console.log(`Serving SPA from: ${DIST_DIR}`);
   });
 };
 
@@ -444,3 +187,5 @@ if (process.argv[1]) {
     startServer();
   }
 }
+
+export { createServer as default };

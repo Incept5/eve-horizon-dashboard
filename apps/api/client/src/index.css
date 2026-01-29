@@ -1,0 +1,58 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    @apply antialiased;
+  }
+
+  body {
+    @apply bg-eve-950 text-white;
+  }
+
+  /* Focus styles for accessibility */
+  *:focus-visible {
+    @apply outline-none ring-2 ring-eve-600 ring-offset-2 ring-offset-eve-950;
+  }
+
+  /* Smooth scrolling */
+  html {
+    scroll-behavior: smooth;
+  }
+
+  /* Selection color */
+  ::selection {
+    @apply bg-eve-600 text-white;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply px-4 py-2 bg-eve-600 hover:bg-eve-500 text-white font-medium rounded-lg transition-colors duration-200;
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 bg-eve-800 hover:bg-eve-700 text-eve-100 font-medium rounded-lg border border-eve-600 transition-colors duration-200;
+  }
+
+  .card {
+    @apply bg-eve-800/50 backdrop-blur-sm rounded-lg border border-eve-700 p-4;
+  }
+}
+
+@layer utilities {
+  /* Custom scrollbar styling */
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-track {
+    @apply bg-eve-900;
+  }
+
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    @apply bg-eve-700 rounded-full hover:bg-eve-600;
+  }
+}
