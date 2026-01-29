@@ -6,6 +6,9 @@ export interface User {
   id: number;
   email: string;
   is_admin: boolean;
+  name?: string;
+  role?: 'admin' | 'member';
+  org_id?: number;
 }
 
 export interface Organization {

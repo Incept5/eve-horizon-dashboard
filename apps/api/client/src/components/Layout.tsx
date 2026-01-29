@@ -1,5 +1,7 @@
 import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { useAuthContext } from '../contexts/AuthContext';
+import { Badge } from './ui/Badge';
 
 interface NavItem {
   path: string;
@@ -22,8 +24,15 @@ const navItems: NavItem[] = [
 export function Layout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const location = useLocation();
+  const navigate = useNavigate();
+  const { user, isAdmin, logout } = useAuthContext();
 
   const isActive = (path: string) => location.pathname === path;
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
 
   return (
     <div className="min-h-screen bg-eve-950 text-white">
@@ -59,25 +68,48 @@ export function Layout({ children }: { children: React.ReactNode }) {
           lg:translate-x-0
         `}
       >
-        <nav className="p-4 space-y-1">
-          {navItems.map((item) => (
-            <Link
-              key={item.path}
-              to={item.path}
-              className={`
-                flex items-center gap-3 px-4 py-3 rounded-lg transition-all
-                ${
-                  isActive(item.path)
-                    ? 'bg-eve-800 text-white border border-eve-700 shadow-lg'
-                    : 'text-eve-300 hover:bg-eve-800/50 hover:text-white'
-                }
-                ${item.adminOnly ? 'mt-8 border-t border-eve-800 pt-8' : ''}
-              `}
+        <nav className="p-4 space-y-1 flex flex-col h-full">
+          <div className="space-y-1">
+            {navItems
+              .filter((item) => !item.adminOnly || isAdmin)
+              .map((item) => (
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  className={`
+                    flex items-center gap-3 px-4 py-3 rounded-lg transition-all
+                    ${
+                      isActive(item.path)
+                        ? 'bg-eve-800 text-white border border-eve-700 shadow-lg'
+                        : 'text-eve-300 hover:bg-eve-800/50 hover:text-white'
+                    }
+                    ${item.adminOnly ? 'mt-8 border-t border-eve-800 pt-8' : ''}
+                  `}
+                >
+                  <span className="text-xl">{item.icon}</span>
+                  <span className="font-medium">{item.label}</span>
+                </Link>
+              ))}
+          </div>
+
+          {/* User section - bottom of sidebar */}
+          <div className="mt-auto border-t border-eve-800 pt-4">
+            <div className="flex items-center gap-3 px-3 py-2">
+              <div className="w-8 h-8 rounded-full bg-eve-700 flex items-center justify-center">
+                <span className="text-sm font-medium">{user?.email?.[0]?.toUpperCase()}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-white truncate">{user?.email}</p>
+                {isAdmin && <Badge variant="info">Admin</Badge>}
+              </div>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="w-full mt-2 px-3 py-2 text-left text-sm text-eve-300 hover:text-white hover:bg-eve-800 rounded transition-colors"
             >
-              <span className="text-xl">{item.icon}</span>
-              <span className="font-medium">{item.label}</span>
-            </Link>
-          ))}
+              Sign out
+            </button>
+          </div>
         </nav>
       </aside>
 
