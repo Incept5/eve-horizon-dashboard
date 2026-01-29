@@ -28,13 +28,7 @@ export interface Project {
   updated_at?: string;
 }
 
-export type JobPhase =
-  | 'plan'
-  | 'work'
-  | 'review'
-  | 'done'
-  | 'blocked'
-  | 'cancelled';
+export type JobPhase = 'idea' | 'backlog' | 'ready' | 'active' | 'review' | 'done' | 'cancelled';
 
 export type JobStatus =
   | 'pending'
@@ -43,21 +37,26 @@ export type JobStatus =
   | 'failed'
   | 'cancelled';
 
-export type IssueType = 'bug' | 'feature' | 'chore' | 'docs' | 'test' | 'refactor';
+export type IssueType = 'epic' | 'story' | 'task';
 
 export interface Job {
-  id: number;
-  project_id: number;
-  parent_id?: number | null;
-  description: string;
+  id: string;
+  project_id: string;
+  subject: string;
+  description?: string;
   phase: JobPhase;
-  status: JobStatus;
-  issue_type?: IssueType | null;
-  assignee_id?: number | null;
-  depth?: number;
-  created_at?: string;
-  updated_at?: string;
-  completed_at?: string | null;
+  status: string;
+  issue_type: IssueType;
+  parent_id?: string;
+  harness?: string;
+  review?: string;
+  created_at: string;
+  updated_at: string;
+  git?: {
+    ref?: string;
+    branch?: string;
+    resolved_branch?: string;
+  };
 }
 
 export interface JobDetail extends Job {
@@ -92,19 +91,23 @@ export interface JobListResponse {
 }
 
 export interface CreateJobRequest {
-  project_id: number;
-  parent_id?: number | null;
-  description: string;
+  subject: string;
+  description?: string;
+  issue_type: IssueType;
   phase?: JobPhase;
-  issue_type?: IssueType;
+  parent_id?: string;
+  harness?: string;
 }
 
 export interface UpdateJobRequest {
+  subject?: string;
   description?: string;
   phase?: JobPhase;
   status?: JobStatus;
   issue_type?: IssueType;
-  assignee_id?: number | null;
+  parent_id?: string;
+  harness?: string;
+  review?: string;
 }
 
 export interface Member {
@@ -121,4 +124,79 @@ export interface SystemEvent {
   message: string;
   created_at: string;
   metadata?: Record<string, unknown>;
+}
+
+export interface JobAttempt {
+  id: string;
+  job_id: string;
+  attempt_number: number;
+  status: string;
+  started_at?: string;
+  completed_at?: string;
+  error?: string;
+}
+
+export interface JobTreeNode {
+  job: Job;
+  children: JobTreeNode[];
+}
+
+export interface JobResult {
+  job_id: string;
+  status: string;
+  output?: unknown;
+  error?: string;
+}
+
+export interface Environment {
+  name: string;
+  status: 'healthy' | 'deploying' | 'failed' | 'unknown';
+  current_ref?: string;
+  current_version?: string;
+  last_deployed_at?: string;
+  url?: string;
+}
+
+export interface Deployment {
+  id: string;
+  environment: string;
+  ref: string;
+  status: 'pending' | 'deploying' | 'success' | 'failed' | 'cancelled';
+  started_at?: string;
+  completed_at?: string;
+  deployed_by?: string;
+  error?: string;
+}
+
+export interface Pipeline {
+  name: string;
+  description?: string;
+  triggers?: string[];
+  steps: PipelineStep[];
+}
+
+export interface PipelineStep {
+  name: string;
+  action: string;
+  inputs?: Record<string, unknown>;
+  outputs?: Record<string, unknown>;
+}
+
+export interface PipelineRun {
+  id: string;
+  pipeline_name: string;
+  status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled';
+  started_at?: string;
+  completed_at?: string;
+  steps: PipelineRunStep[];
+  result_json?: unknown;
+}
+
+export interface PipelineRunStep {
+  name: string;
+  status: string;
+  started_at?: string;
+  completed_at?: string;
+  output_json?: unknown;
+  error?: string;
 }

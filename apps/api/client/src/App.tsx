@@ -6,6 +6,7 @@ import { LoginPage } from './pages/LoginPage';
 import { ProjectsPage } from './pages/ProjectsPage';
 import { BoardPage } from './pages/BoardPage';
 import { EpicsPage } from './pages/EpicsPage';
+import { EpicDetailPage } from './pages/EpicDetailPage';
 import { JobsPage } from './pages/JobsPage';
 import { PipelinesPage } from './pages/PipelinesPage';
 import { EnvironmentsPage } from './pages/EnvironmentsPage';
@@ -31,6 +32,7 @@ function App() {
           <Route path="/projects" element={<ProjectsPage />} />
           <Route path="/board" element={<BoardPage />} />
           <Route path="/epics" element={<EpicsPage />} />
+          <Route path="/epics/:epicId" element={<EpicDetailPage />} />
           <Route path="/jobs" element={<JobsPage />} />
           <Route path="/pipelines" element={<PipelinesPage />} />
           <Route path="/environments" element={<EnvironmentsPage />} />

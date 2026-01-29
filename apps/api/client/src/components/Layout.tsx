@@ -1,8 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuthContext } from '../contexts/AuthContext';
 import { Badge } from './ui/Badge';
 import { ProjectSwitcher } from './ProjectSwitcher';
+import { CommandPalette } from './CommandPalette';
+import { ShortcutsHelp } from './ShortcutsHelp';
 
 interface NavItem {
   path: string;
@@ -24,6 +26,9 @@ const navItems: NavItem[] = [
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [shortcutsHelpOpen, setShortcutsHelpOpen] = useState(false);
+  const [pendingNavKey, setPendingNavKey] = useState<string | null>(null);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, isAdmin, logout } = useAuthContext();
@@ -34,6 +39,85 @@ export function Layout({ children }: { children: React.ReactNode }) {
     logout();
     navigate('/login');
   };
+
+  // Global keyboard shortcuts
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Command palette - Cmd/Ctrl+K
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setCommandPaletteOpen((prev) => !prev);
+        return;
+      }
+
+      // Shortcuts help - ?
+      if (e.key === '?' && !e.metaKey && !e.ctrlKey && !e.shiftKey) {
+        // Only trigger if not focused on an input element
+        const target = e.target as HTMLElement;
+        if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
+          e.preventDefault();
+          setShortcutsHelpOpen(true);
+          return;
+        }
+      }
+
+      // Escape - Close modals/drawers
+      if (e.key === 'Escape') {
+        if (commandPaletteOpen) {
+          setCommandPaletteOpen(false);
+          return;
+        }
+        if (shortcutsHelpOpen) {
+          setShortcutsHelpOpen(false);
+          return;
+        }
+      }
+
+      // Navigation shortcuts - G then X pattern
+      if (e.key.toLowerCase() === 'g' && !e.metaKey && !e.ctrlKey) {
+        const target = e.target as HTMLElement;
+        if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
+          setPendingNavKey('g');
+          return;
+        }
+      }
+
+      // Handle second key after G
+      if (pendingNavKey === 'g') {
+        const target = e.target as HTMLElement;
+        if (target.tagName !== 'INPUT' && target.tagName !== 'TEXTAREA') {
+          switch (e.key.toLowerCase()) {
+            case 'p':
+              navigate('/projects');
+              break;
+            case 'b':
+              navigate('/board');
+              break;
+            case 'j':
+              navigate('/jobs');
+              break;
+            case 'e':
+              navigate('/epics');
+              break;
+          }
+          setPendingNavKey(null);
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [navigate, commandPaletteOpen, shortcutsHelpOpen, pendingNavKey]);
+
+  // Reset pending nav key after timeout
+  useEffect(() => {
+    if (pendingNavKey) {
+      const timeout = setTimeout(() => {
+        setPendingNavKey(null);
+      }, 1000);
+      return () => clearTimeout(timeout);
+    }
+  }, [pendingNavKey]);
 
   return (
     <div className="min-h-screen bg-eve-950 text-white">
@@ -131,6 +215,18 @@ export function Layout({ children }: { children: React.ReactNode }) {
           onClick={() => setSidebarOpen(false)}
         />
       )}
+
+      {/* Command Palette */}
+      <CommandPalette
+        isOpen={commandPaletteOpen}
+        onClose={() => setCommandPaletteOpen(false)}
+      />
+
+      {/* Shortcuts Help */}
+      <ShortcutsHelp
+        isOpen={shortcutsHelpOpen}
+        onClose={() => setShortcutsHelpOpen(false)}
+      />
     </div>
   );
 }

@@ -5,3 +5,4 @@
 export * from './useAuth';
 export * from './useProjects';
 export * from './useJobs';
+export * from './useKeyboardShortcuts';
