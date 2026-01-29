@@ -95,3 +95,125 @@ This file must be rewritten to match the actual product domain and tech stack on
 - The chosen stack and architecture.
 - What starter code was removed or replaced, and what (if anything) was kept.
 - The new local dev and deploy workflow.
+
+<skills_system priority="1">
+
+## Available Skills
+
+<!-- SKILLS_TABLE_START -->
+<usage>
+When users ask you to perform tasks, check if any of the available skills below can help complete the task more effectively. Skills provide specialized capabilities and domain knowledge.
+
+How to use skills:
+- Invoke: Bash("openskills read <skill-name>")
+- The skill content will load with detailed instructions on how to complete the task
+- Base directory provided in output for resolving bundled resources (references/, scripts/, assets/)
+
+Usage notes:
+- Only use skills listed in <available_skills> below
+- Do not invoke a skill that is already loaded in your context
+- Each skill invocation is stateless
+</usage>
+
+<available_skills>
+
+<skill>
+<name>eve-auth-and-secrets</name>
+<description>Authenticate with Eve and manage project secrets for deployments and workflows.</description>
+<location>project</location>
+</skill>
+
+<skill>
+<name>eve-cli-primitives</name>
+<description>Core Eve CLI primitives and capabilities for app developers. Use as the quick reference for commands and flows.</description>
+<location>project</location>
+</skill>
+
+<skill>
+<name>eve-deploy-debugging</name>
+<description>Deploy and debug Eve-compatible apps via the CLI, with a focus on staging environments.</description>
+<location>project</location>
+</skill>
+
+<skill>
+<name>eve-job-debugging</name>
+<description>Monitor and debug Eve jobs with CLI follow, logs, wait, and diagnose commands. Use when work is stuck, failing, or you need fast status.</description>
+<location>project</location>
+</skill>
+
+<skill>
+<name>eve-job-lifecycle</name>
+<description>Create, manage, and review Eve jobs, phases, and dependencies. Use when running knowledge work in Eve or structuring job hierarchies.</description>
+<location>project</location>
+</skill>
+
+<skill>
+<name>eve-local-dev-loop</name>
+<description>Local Docker Compose development loop for Eve-compatible apps, with handoff to staging deploys.</description>
+<location>project</location>
+</skill>
+
+<skill>
+<name>eve-manifest-authoring</name>
+<description>Author and maintain Eve manifest files (.eve/manifest.yaml) for services, environments, pipelines, workflows, and secret interpolation. Use when changing deployment shape or runtime configuration in an Eve-compatible repo.</description>
+<location>project</location>
+</skill>
+
+<skill>
+<name>eve-new-project-setup</name>
+<description>Configure a new Eve Horizon project after running eve init (profile, auth, manifest, and repo linkage).</description>
+<location>project</location>
+</skill>
+
+<skill>
+<name>eve-orchestration</name>
+<description>Orchestrate jobs via depth propagation, parallel decomposition, relations, and control signals</description>
+<location>project</location>
+</skill>
+
+<skill>
+<name>eve-pipelines-workflows</name>
+<description>Define and run Eve pipelines and workflows via manifest and CLI. Use when wiring build, release, deploy flows or invoking workflow jobs.</description>
+<location>project</location>
+</skill>
+
+<skill>
+<name>eve-plan-implementation</name>
+<description>Execute software engineering plan documents using Eve jobs, dependencies, and review gating.</description>
+<location>project</location>
+</skill>
+
+<skill>
+<name>eve-project-bootstrap</name>
+<description>Bootstrap an Eve-compatible project with org/project setup, profile defaults, repo linkage, and first deploy.</description>
+<location>project</location>
+</skill>
+
+<skill>
+<name>eve-repo-upkeep</name>
+<description>Keep Eve-compatible repos aligned with platform best practices and current manifest conventions.</description>
+<location>project</location>
+</skill>
+
+<skill>
+<name>eve-se-index</name>
+<description>Load this first. Routes to the right Eve SE skill for developing, deploying, and debugging Eve-compatible apps.</description>
+<location>project</location>
+</skill>
+
+<skill>
+<name>eve-skill-distillation</name>
+<description>Distill repeated work into Eve skillpacks by creating or updating skills with concise instructions and references. Use when a workflow repeats or knowledge should be shared across agents.</description>
+<location>project</location>
+</skill>
+
+<skill>
+<name>eve-troubleshooting</name>
+<description>Troubleshoot common Eve deploy and job failures using CLI-first diagnostics.</description>
+<location>project</location>
+</skill>
+
+</available_skills>
+<!-- SKILLS_TABLE_END -->
+
+</skills_system>
