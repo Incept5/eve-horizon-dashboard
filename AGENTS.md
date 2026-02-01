@@ -237,6 +237,12 @@ Usage notes:
 </skill>
 
 <skill>
+<name>eve-read-eve-docs</name>
+<description>Load first. Index of distilled Eve Horizon system docs for CLI usage, manifests, pipelines, jobs, secrets, and debugging.</description>
+<location>project</location>
+</skill>
+
+<skill>
 <name>eve-repo-upkeep</name>
 <description>Keep Eve-compatible repos aligned with platform best practices and current manifest conventions.</description>
 <location>project</location>
