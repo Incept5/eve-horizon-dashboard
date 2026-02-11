@@ -18,6 +18,9 @@ RUN npm run build
 # Production stage
 FROM node:20-alpine
 
+LABEL org.opencontainers.image.source="https://github.com/Incept5/eve-horizon-dashboard"
+LABEL org.opencontainers.image.description="Eve Horizon Dashboard"
+
 WORKDIR /app
 
 # Copy server files

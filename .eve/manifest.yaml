@@ -45,6 +45,9 @@ pipelines:
     steps:
       - name: build
         action: { type: build }
-      - name: deploy
+      - name: release
         depends_on: [build]
+        action: { type: release }
+      - name: deploy
+        depends_on: [release]
         action: { type: deploy }
