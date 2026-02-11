@@ -3,92 +3,40 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Input } from '../components/ui/Input';
-
-interface Environment {
-  name: string;
-  status: 'healthy' | 'deploying' | 'failed';
-  current_ref: string;
-  last_deployed_at: string;
-  url?: string;
-}
-
-interface Deployment {
-  id: string;
-  environment: string;
-  ref: string;
-  status: 'success' | 'deploying' | 'failed';
-  started_at: string;
-  completed_at?: string;
-  deployed_by: string;
-}
-
-const mockEnvironments: Environment[] = [
-  {
-    name: 'test',
-    status: 'healthy',
-    current_ref: 'abc123',
-    last_deployed_at: '2026-01-29T08:00:00Z',
-    url: 'https://test.example.com',
-  },
-  {
-    name: 'staging',
-    status: 'deploying',
-    current_ref: 'def456',
-    last_deployed_at: '2026-01-29T09:30:00Z',
-    url: 'https://staging.example.com',
-  },
-  {
-    name: 'production',
-    status: 'healthy',
-    current_ref: 'abc123',
-    last_deployed_at: '2026-01-28T15:00:00Z',
-    url: 'https://app.example.com',
-  },
-];
-
-const mockDeployments: Deployment[] = [
-  {
-    id: '1',
-    environment: 'staging',
-    ref: 'def456',
-    status: 'deploying',
-    started_at: '2026-01-29T09:30:00Z',
-    deployed_by: 'adam',
-  },
-  {
-    id: '2',
-    environment: 'test',
-    ref: 'abc123',
-    status: 'success',
-    started_at: '2026-01-29T08:00:00Z',
-    completed_at: '2026-01-29T08:05:00Z',
-    deployed_by: 'adam',
-  },
-];
+import { useProjectContext } from '../contexts/ProjectContext';
+import { useEnvironments, useDeployments, useDeploy } from '../hooks';
+import type { Environment, Deployment } from '../api/types';
 
 function DeployModal({
   environment,
+  projectId,
   onClose,
-  onDeploy,
 }: {
   environment: Environment;
+  projectId: string;
   onClose: () => void;
-  onDeploy: (ref: string, inputs: string) => void;
 }) {
   const [ref, setRef] = useState('');
   const [inputs, setInputs] = useState('');
-  const [isDeploying, setIsDeploying] = useState(false);
+  const deployMutation = useDeploy();
 
-  const handleDeploy = async () => {
-    setIsDeploying(true);
-    try {
-      await onDeploy(ref, inputs);
-      onClose();
-    } catch (error) {
-      console.error('Deploy failed:', error);
-    } finally {
-      setIsDeploying(false);
+  const handleDeploy = () => {
+    let parsedInputs: Record<string, unknown> | undefined;
+    if (inputs.trim()) {
+      try {
+        parsedInputs = JSON.parse(inputs);
+      } catch {
+        return; // Invalid JSON, don't submit
+      }
     }
+    deployMutation.mutate(
+      { projectId, envName: environment.name, ref, inputs: parsedInputs },
+      {
+        onSuccess: () => {
+          onClose();
+        },
+      }
+    );
   };
 
   return (
@@ -121,6 +69,16 @@ function DeployModal({
         </div>
 
         <div className="p-6 space-y-4">
+          {deployMutation.error && (
+            <div className="bg-error-900/20 border border-error-700 rounded-lg p-3">
+              <p className="text-error-300 text-sm">
+                {deployMutation.error instanceof Error
+                  ? deployMutation.error.message
+                  : 'Deploy failed'}
+              </p>
+            </div>
+          )}
+
           <Input
             label="Git Ref (branch or SHA)"
             placeholder="main, feature-branch, or commit SHA"
@@ -143,14 +101,14 @@ function DeployModal({
         </div>
 
         <div className="p-6 border-t border-eve-700 flex items-center justify-end gap-3">
-          <Button variant="ghost" onClick={onClose} disabled={isDeploying}>
+          <Button variant="ghost" onClick={onClose} disabled={deployMutation.isPending}>
             Cancel
           </Button>
           <Button
             variant="primary"
             onClick={handleDeploy}
-            disabled={!ref || isDeploying}
-            loading={isDeploying}
+            disabled={!ref || deployMutation.isPending}
+            loading={deployMutation.isPending}
           >
             Deploy
           </Button>
@@ -161,8 +119,8 @@ function DeployModal({
 }
 
 function getStatusBadgeVariant(
-  status: 'healthy' | 'deploying' | 'failed'
-): 'success' | 'warning' | 'error' {
+  status: string
+): 'success' | 'warning' | 'error' | 'default' {
   switch (status) {
     case 'healthy':
       return 'success';
@@ -170,19 +128,25 @@ function getStatusBadgeVariant(
       return 'warning';
     case 'failed':
       return 'error';
+    default:
+      return 'default';
   }
 }
 
 function getDeploymentStatusBadgeVariant(
-  status: 'success' | 'deploying' | 'failed'
-): 'success' | 'warning' | 'error' {
+  status: string
+): 'success' | 'warning' | 'error' | 'default' {
   switch (status) {
     case 'success':
       return 'success';
     case 'deploying':
+    case 'pending':
       return 'warning';
     case 'failed':
+    case 'cancelled':
       return 'error';
+    default:
+      return 'default';
   }
 }
 
@@ -202,23 +166,61 @@ function formatTimestamp(timestamp: string): string {
 }
 
 export function EnvironmentsPage() {
-  const [environments] = useState<Environment[]>(mockEnvironments);
-  const [deployments] = useState<Deployment[]>(mockDeployments);
+  const { currentProject, isLoading: projectLoading } = useProjectContext();
+  const projectId = currentProject?.id?.toString();
+
+  const {
+    data: environments = [],
+    isLoading: envsLoading,
+    error: envsError,
+  } = useEnvironments(projectId);
+
   const [selectedEnv, setSelectedEnv] = useState<Environment | null>(null);
-  const [isLoading] = useState(false);
+  const [expandedEnv, setExpandedEnv] = useState<string | null>(null);
 
-  const handleDeploy = async (ref: string, inputs: string) => {
-    console.log('Deploying', ref, 'to', selectedEnv?.name, 'with inputs:', inputs);
-    // API call would go here
-    await new Promise((resolve) => setTimeout(resolve, 1000));
-  };
-
-  if (isLoading) {
+  if (projectLoading) {
     return (
       <div className="space-y-6">
         <h1 className="text-3xl font-bold text-white">Environments</h1>
         <div className="flex items-center justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-eve-500"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!currentProject) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-3xl font-bold text-white">Environments</h1>
+        <Card>
+          <p className="text-eve-300 text-center py-8">
+            Please select a project to view environments.
+          </p>
+        </Card>
+      </div>
+    );
+  }
+
+  if (envsLoading) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-3xl font-bold text-white">Environments</h1>
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-eve-500"></div>
+        </div>
+      </div>
+    );
+  }
+
+  if (envsError) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-3xl font-bold text-white">Environments</h1>
+        <div className="bg-error-900/20 border border-error-700 rounded-lg p-4">
+          <p className="text-error-300 text-sm">
+            {envsError instanceof Error ? envsError.message : 'Failed to load environments'}
+          </p>
         </div>
       </div>
     );
@@ -243,7 +245,7 @@ export function EnvironmentsPage() {
 
       {/* Environment Cards */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {environments.map((env) => (
+        {environments.map((env: Environment) => (
           <Card key={env.name}>
             <div className="space-y-4">
               <div className="flex items-start justify-between">
@@ -258,19 +260,30 @@ export function EnvironmentsPage() {
               </div>
 
               <div className="space-y-2">
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-eve-400">Current Ref:</span>
-                  <code className="text-eve-200 bg-eve-950 px-2 py-0.5 rounded font-mono text-xs">
-                    {env.current_ref}
-                  </code>
-                </div>
+                {env.current_ref && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-eve-400">Current Ref:</span>
+                    <code className="text-eve-200 bg-eve-950 px-2 py-0.5 rounded font-mono text-xs">
+                      {env.current_ref}
+                    </code>
+                  </div>
+                )}
 
-                <div className="flex items-center justify-between text-sm">
-                  <span className="text-eve-400">Last Deploy:</span>
-                  <span className="text-eve-300">
-                    {formatTimestamp(env.last_deployed_at)}
-                  </span>
-                </div>
+                {env.current_version && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-eve-400">Version:</span>
+                    <span className="text-eve-200 text-xs">{env.current_version}</span>
+                  </div>
+                )}
+
+                {env.last_deployed_at && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-eve-400">Last Deploy:</span>
+                    <span className="text-eve-300">
+                      {formatTimestamp(env.last_deployed_at)}
+                    </span>
+                  </div>
+                )}
 
                 {env.url && (
                   <div className="flex items-start gap-2 text-sm">
@@ -299,7 +312,7 @@ export function EnvironmentsPage() {
                 )}
               </div>
 
-              <div className="pt-3 border-t border-eve-700">
+              <div className="pt-3 border-t border-eve-700 flex gap-2">
                 <Button
                   variant="primary"
                   size="sm"
@@ -308,87 +321,132 @@ export function EnvironmentsPage() {
                 >
                   Deploy
                 </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() =>
+                    setExpandedEnv(expandedEnv === env.name ? null : env.name)
+                  }
+                >
+                  History
+                </Button>
               </div>
             </div>
           </Card>
         ))}
       </div>
 
-      {/* Deployment History */}
-      <Card>
-        <div className="space-y-4">
-          <h2 className="text-xl font-semibold text-white">Deployment History</h2>
-
-          {deployments.length === 0 ? (
-            <p className="text-eve-400 text-sm text-center py-8">
-              No deployments yet.
-            </p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b border-eve-700">
-                    <th className="text-left py-3 px-4 text-sm font-medium text-eve-400">
-                      Environment
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-eve-400">
-                      Ref
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-eve-400">
-                      Status
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-eve-400">
-                      Time
-                    </th>
-                    <th className="text-left py-3 px-4 text-sm font-medium text-eve-400">
-                      Deployed By
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {deployments.map((deployment) => (
-                    <tr
-                      key={deployment.id}
-                      className="border-b border-eve-800 hover:bg-eve-800/30 transition-colors"
-                    >
-                      <td className="py-3 px-4 text-sm text-eve-200 capitalize">
-                        {deployment.environment}
-                      </td>
-                      <td className="py-3 px-4 text-sm">
-                        <code className="text-eve-200 bg-eve-950 px-2 py-0.5 rounded font-mono text-xs">
-                          {deployment.ref}
-                        </code>
-                      </td>
-                      <td className="py-3 px-4 text-sm">
-                        <Badge
-                          variant={getDeploymentStatusBadgeVariant(deployment.status)}
-                        >
-                          {deployment.status}
-                        </Badge>
-                      </td>
-                      <td className="py-3 px-4 text-sm text-eve-300">
-                        {formatTimestamp(deployment.started_at)}
-                      </td>
-                      <td className="py-3 px-4 text-sm text-eve-300">
-                        {deployment.deployed_by}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-      </Card>
+      {/* Deployment History for expanded environment */}
+      {expandedEnv && (
+        <DeploymentHistory projectId={projectId!} envName={expandedEnv} />
+      )}
 
       {/* Deploy Modal */}
-      {selectedEnv && (
+      {selectedEnv && projectId && (
         <DeployModal
           environment={selectedEnv}
+          projectId={projectId}
           onClose={() => setSelectedEnv(null)}
-          onDeploy={handleDeploy}
         />
       )}
     </div>
+  );
+}
+
+function DeploymentHistory({
+  projectId,
+  envName,
+}: {
+  projectId: string;
+  envName: string;
+}) {
+  const { data: deployments = [], isLoading, error } = useDeployments(projectId, envName);
+
+  return (
+    <Card>
+      <div className="space-y-4">
+        <h2 className="text-xl font-semibold text-white">
+          Deployment History: <span className="capitalize">{envName}</span>
+        </h2>
+
+        {isLoading && (
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-eve-500"></div>
+          </div>
+        )}
+
+        {error && (
+          <div className="bg-error-900/20 border border-error-700 rounded-lg p-3">
+            <p className="text-error-300 text-sm">
+              {error instanceof Error ? error.message : 'Failed to load deployments'}
+            </p>
+          </div>
+        )}
+
+        {!isLoading && !error && deployments.length === 0 && (
+          <p className="text-eve-400 text-sm text-center py-8">
+            No deployments yet.
+          </p>
+        )}
+
+        {!isLoading && !error && deployments.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-eve-700">
+                  <th className="text-left py-3 px-4 text-sm font-medium text-eve-400">
+                    Environment
+                  </th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-eve-400">
+                    Ref
+                  </th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-eve-400">
+                    Status
+                  </th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-eve-400">
+                    Time
+                  </th>
+                  <th className="text-left py-3 px-4 text-sm font-medium text-eve-400">
+                    Deployed By
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {deployments.map((deployment: Deployment) => (
+                  <tr
+                    key={deployment.id}
+                    className="border-b border-eve-800 hover:bg-eve-800/30 transition-colors"
+                  >
+                    <td className="py-3 px-4 text-sm text-eve-200 capitalize">
+                      {deployment.environment}
+                    </td>
+                    <td className="py-3 px-4 text-sm">
+                      <code className="text-eve-200 bg-eve-950 px-2 py-0.5 rounded font-mono text-xs">
+                        {deployment.ref}
+                      </code>
+                    </td>
+                    <td className="py-3 px-4 text-sm">
+                      <Badge
+                        variant={getDeploymentStatusBadgeVariant(deployment.status)}
+                      >
+                        {deployment.status}
+                      </Badge>
+                    </td>
+                    <td className="py-3 px-4 text-sm text-eve-300">
+                      {deployment.started_at
+                        ? formatTimestamp(deployment.started_at)
+                        : '-'}
+                    </td>
+                    <td className="py-3 px-4 text-sm text-eve-300">
+                      {deployment.deployed_by || '-'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </Card>
   );
 }

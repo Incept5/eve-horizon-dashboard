@@ -1,96 +1,52 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Input } from '../components/ui/Input';
+import { useProjectContext } from '../contexts/ProjectContext';
+import { useJobs } from '../hooks';
+import type { Job, JobPhase } from '../api/types';
 
-interface Epic {
-  id: string;
-  subject: string;
-  description?: string;
-  phase: string;
-  status: string;
-  issue_type: 'epic';
+interface EpicWithProgress {
+  job: Job;
   children_count: number;
   done_count: number;
 }
 
-// Mock epics for development
-const mockEpics: Epic[] = [
-  {
-    id: '1',
-    subject: 'User Authentication',
-    description: 'Implement full auth flow with OAuth, session management, and security best practices',
-    phase: 'active',
-    status: 'in_progress',
-    issue_type: 'epic',
-    children_count: 5,
-    done_count: 2,
-  },
-  {
-    id: '2',
-    subject: 'Dashboard UI',
-    description: 'Build the main dashboard interface with real-time updates and responsive design',
-    phase: 'review',
-    status: 'pending_review',
-    issue_type: 'epic',
-    children_count: 8,
-    done_count: 6,
-  },
-  {
-    id: '3',
-    subject: 'API Integration',
-    description: 'Connect to backend services with proper error handling and retry logic',
-    phase: 'backlog',
-    status: 'pending',
-    issue_type: 'epic',
-    children_count: 3,
-    done_count: 0,
-  },
-  {
-    id: '4',
-    subject: 'Database Migration',
-    description: 'Migrate from SQLite to PostgreSQL with zero downtime',
-    phase: 'ready',
-    status: 'ready',
-    issue_type: 'epic',
-    children_count: 12,
-    done_count: 3,
-  },
-  {
-    id: '5',
-    subject: 'Testing Infrastructure',
-    description: 'Set up comprehensive testing with unit, integration, and e2e tests',
-    phase: 'done',
-    status: 'completed',
-    issue_type: 'epic',
-    children_count: 10,
-    done_count: 10,
-  },
-  {
-    id: '6',
-    subject: 'Performance Optimization',
-    description: 'Optimize application performance for faster load times and better UX',
-    phase: 'idea',
-    status: 'draft',
-    issue_type: 'epic',
-    children_count: 0,
-    done_count: 0,
-  },
-];
-
 export function EpicsPage() {
   const navigate = useNavigate();
+  const { currentProject } = useProjectContext();
+  const projectId = currentProject?.id;
+  const { data: allJobs = [], isLoading, error } = useJobs(projectId);
+
   const [searchQuery, setSearchQuery] = useState('');
-  const [isLoading, _setIsLoading] = useState(false);
+
+  // Derive epics with child counts from the full job list
+  const epicsWithProgress: EpicWithProgress[] = useMemo(() => {
+    const epics = allJobs.filter((job: Job) => job.issue_type === 'epic');
+    return epics.map((epic: Job) => {
+      const children = allJobs.filter((job: Job) => job.parent_id === epic.id);
+      const doneCount = children.filter((job: Job) => job.phase === 'done').length;
+      return {
+        job: epic,
+        children_count: children.length,
+        done_count: doneCount,
+      };
+    });
+  }, [allJobs]);
 
   // Filter epics based on search query
-  const filteredEpics = mockEpics.filter((epic) =>
-    epic.subject.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    epic.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    epic.status.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const filteredEpics = useMemo(() => {
+    if (!searchQuery) return epicsWithProgress;
+    const query = searchQuery.toLowerCase();
+    return epicsWithProgress.filter(
+      (epic) =>
+        epic.job.subject.toLowerCase().includes(query) ||
+        epic.job.description?.toLowerCase().includes(query) ||
+        epic.job.status.toLowerCase().includes(query)
+    );
+  }, [epicsWithProgress, searchQuery]);
 
   const handleEpicClick = (epicId: string) => {
     navigate(`/epics/${epicId}`);
@@ -106,8 +62,8 @@ export function EpicsPage() {
     return description.substring(0, maxLength) + '...';
   };
 
-  const getPhaseVariant = (phase: string) => {
-    const phaseMap: Record<string, 'idea' | 'backlog' | 'ready' | 'active' | 'review' | 'done' | 'cancelled'> = {
+  const getPhaseVariant = (phase: string): JobPhase | 'default' => {
+    const phaseMap: Record<string, JobPhase> = {
       idea: 'idea',
       backlog: 'backlog',
       ready: 'ready',
@@ -147,6 +103,20 @@ export function EpicsPage() {
     </Card>
   );
 
+  // No project selected
+  if (!currentProject) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-3xl font-bold text-white">Epics</h1>
+        <Card>
+          <p className="text-eve-300 text-center py-8">
+            Please select a project to view epics.
+          </p>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -167,6 +137,15 @@ export function EpicsPage() {
         />
       </div>
 
+      {/* Error state */}
+      {error && (
+        <div className="bg-error-900/20 border border-error-700 rounded-lg p-4">
+          <p className="text-error-300 text-sm">
+            {error instanceof Error ? error.message : 'Failed to load epics'}
+          </p>
+        </div>
+      )}
+
       {/* Loading state */}
       {isLoading && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
@@ -180,7 +159,7 @@ export function EpicsPage() {
       )}
 
       {/* Empty state - no epics at all */}
-      {!isLoading && filteredEpics.length === 0 && mockEpics.length === 0 && (
+      {!isLoading && !error && filteredEpics.length === 0 && epicsWithProgress.length === 0 && (
         <Card>
           <p className="text-eve-300 text-center py-8">
             No epics found. Create your first epic to get started.
@@ -189,7 +168,7 @@ export function EpicsPage() {
       )}
 
       {/* No search results */}
-      {!isLoading && filteredEpics.length === 0 && mockEpics.length > 0 && (
+      {!isLoading && !error && filteredEpics.length === 0 && epicsWithProgress.length > 0 && (
         <Card>
           <p className="text-eve-300 text-center py-8">
             No epics match your search criteria.
@@ -198,51 +177,53 @@ export function EpicsPage() {
       )}
 
       {/* Epic grid */}
-      {!isLoading && filteredEpics.length > 0 && (
+      {!isLoading && !error && filteredEpics.length > 0 && (
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {filteredEpics.map((epic) => {
             const progress = calculateProgress(epic.done_count, epic.children_count);
 
             return (
               <Card
-                key={epic.id}
+                key={epic.job.id}
                 className="cursor-pointer transition-all hover:border-eve-600 hover:shadow-lg"
-                onClick={() => handleEpicClick(epic.id)}
+                onClick={() => handleEpicClick(epic.job.id)}
               >
                 <div className="space-y-4">
                   {/* Header with title and phase badge */}
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex-1 min-w-0">
                       <h3 className="text-lg font-semibold text-white truncate">
-                        {epic.subject}
+                        {epic.job.subject}
                       </h3>
                     </div>
-                    <Badge variant={getPhaseVariant(epic.phase)} />
+                    <Badge variant={getPhaseVariant(epic.job.phase)} />
                   </div>
 
                   {/* Description */}
                   <p className="text-sm text-eve-300 line-clamp-2">
-                    {truncateDescription(epic.description)}
+                    {truncateDescription(epic.job.description)}
                   </p>
 
                   {/* Progress section */}
-                  <div className="space-y-2">
-                    {/* Progress bar */}
-                    <div className="w-full bg-eve-900 rounded-full h-2 overflow-hidden">
-                      <div
-                        className="h-full bg-eve-600 transition-all duration-300"
-                        style={{ width: `${progress}%` }}
-                      ></div>
-                    </div>
+                  {epic.children_count > 0 && (
+                    <div className="space-y-2">
+                      {/* Progress bar */}
+                      <div className="w-full bg-eve-900 rounded-full h-2 overflow-hidden">
+                        <div
+                          className="h-full bg-eve-600 transition-all duration-300"
+                          style={{ width: `${progress}%` }}
+                        ></div>
+                      </div>
 
-                    {/* Stats */}
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="text-eve-400">
-                        {epic.done_count} of {epic.children_count} completed
-                      </span>
-                      <span className="text-eve-300 font-medium">{progress}%</span>
+                      {/* Stats */}
+                      <div className="flex items-center justify-between text-sm">
+                        <span className="text-eve-400">
+                          {epic.done_count} of {epic.children_count} completed
+                        </span>
+                        <span className="text-eve-300 font-medium">{progress}%</span>
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Footer with child count */}
                   <div className="pt-3 border-t border-eve-700">

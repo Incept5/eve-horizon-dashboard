@@ -3,185 +3,20 @@ import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { useProjectContext } from '../contexts/ProjectContext';
-
-// Types
-interface PipelineStep {
-  name: string;
-  status: 'pending' | 'running' | 'success' | 'failed';
-  started_at?: string;
-  completed_at?: string;
-}
-
-interface PipelineRun {
-  id: string;
-  status: 'running' | 'success' | 'failed';
-  started_at: string;
-  completed_at?: string;
-  steps: PipelineStep[];
-}
-
-interface Pipeline {
-  name: string;
-  description: string;
-  last_run?: {
-    status: 'running' | 'success' | 'failed';
-    completed_at?: string;
-  };
-  runs: PipelineRun[];
-}
-
-// Mock data
-const mockPipelines: Pipeline[] = [
-  {
-    name: 'deploy',
-    description: 'Build and deploy to environment',
-    last_run: {
-      status: 'success',
-      completed_at: '2026-01-29T09:00:00Z'
-    },
-    runs: [
-      {
-        id: 'run_1',
-        status: 'success',
-        started_at: '2026-01-29T08:55:00Z',
-        completed_at: '2026-01-29T09:00:00Z',
-        steps: [
-          {
-            name: 'checkout',
-            status: 'success',
-            started_at: '2026-01-29T08:55:00Z',
-            completed_at: '2026-01-29T08:55:30Z'
-          },
-          {
-            name: 'build',
-            status: 'success',
-            started_at: '2026-01-29T08:55:30Z',
-            completed_at: '2026-01-29T08:57:00Z'
-          },
-          {
-            name: 'test',
-            status: 'success',
-            started_at: '2026-01-29T08:57:00Z',
-            completed_at: '2026-01-29T08:58:00Z'
-          },
-          {
-            name: 'deploy',
-            status: 'success',
-            started_at: '2026-01-29T08:58:00Z',
-            completed_at: '2026-01-29T09:00:00Z'
-          },
-        ],
-      },
-      {
-        id: 'run_2',
-        status: 'failed',
-        started_at: '2026-01-29T07:30:00Z',
-        completed_at: '2026-01-29T07:32:00Z',
-        steps: [
-          {
-            name: 'checkout',
-            status: 'success',
-            started_at: '2026-01-29T07:30:00Z',
-            completed_at: '2026-01-29T07:30:30Z'
-          },
-          {
-            name: 'build',
-            status: 'success',
-            started_at: '2026-01-29T07:30:30Z',
-            completed_at: '2026-01-29T07:31:00Z'
-          },
-          {
-            name: 'test',
-            status: 'failed',
-            started_at: '2026-01-29T07:31:00Z',
-            completed_at: '2026-01-29T07:32:00Z'
-          },
-          {
-            name: 'deploy',
-            status: 'pending',
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: 'test',
-    description: 'Run test suite',
-    last_run: {
-      status: 'failed',
-      completed_at: '2026-01-29T08:30:00Z'
-    },
-    runs: [
-      {
-        id: 'run_3',
-        status: 'failed',
-        started_at: '2026-01-29T08:25:00Z',
-        completed_at: '2026-01-29T08:30:00Z',
-        steps: [
-          {
-            name: 'setup',
-            status: 'success',
-            started_at: '2026-01-29T08:25:00Z',
-            completed_at: '2026-01-29T08:26:00Z'
-          },
-          {
-            name: 'unit-tests',
-            status: 'success',
-            started_at: '2026-01-29T08:26:00Z',
-            completed_at: '2026-01-29T08:28:00Z'
-          },
-          {
-            name: 'integration-tests',
-            status: 'failed',
-            started_at: '2026-01-29T08:28:00Z',
-            completed_at: '2026-01-29T08:30:00Z'
-          },
-        ],
-      },
-    ],
-  },
-  {
-    name: 'release',
-    description: 'Create and publish a new release',
-    last_run: {
-      status: 'running'
-    },
-    runs: [
-      {
-        id: 'run_4',
-        status: 'running',
-        started_at: '2026-01-29T10:00:00Z',
-        steps: [
-          {
-            name: 'version-bump',
-            status: 'success',
-            started_at: '2026-01-29T10:00:00Z',
-            completed_at: '2026-01-29T10:00:30Z'
-          },
-          {
-            name: 'build-artifacts',
-            status: 'running',
-            started_at: '2026-01-29T10:00:30Z',
-          },
-          {
-            name: 'publish',
-            status: 'pending',
-          },
-        ],
-      },
-    ],
-  },
-];
+import { usePipelines, usePipelineRuns, useRunPipeline } from '../hooks';
+import type { Pipeline, PipelineRun, PipelineRunStep } from '../api/types';
 
 // Run Pipeline Modal Component
 function RunPipelineModal({
   pipelineName,
   onClose,
   onRun,
+  isRunning,
 }: {
   pipelineName: string;
   onClose: () => void;
   onRun: (inputs: string) => void;
+  isRunning: boolean;
 }) {
   const [inputs, setInputs] = useState('{}');
   const [isValidJson, setIsValidJson] = useState(true);
@@ -199,7 +34,6 @@ function RunPipelineModal({
   const handleRun = () => {
     if (isValidJson) {
       onRun(inputs);
-      onClose();
     }
   };
 
@@ -250,7 +84,7 @@ function RunPipelineModal({
           </div>
 
           <div className="flex gap-3 pt-4">
-            <Button onClick={handleRun} disabled={!isValidJson} fullWidth>
+            <Button onClick={handleRun} disabled={!isValidJson || isRunning} loading={isRunning} fullWidth>
               Run Pipeline
             </Button>
             <Button onClick={onClose} variant="ghost" fullWidth>
@@ -264,14 +98,38 @@ function RunPipelineModal({
 }
 
 // Pipeline Card Component
-function PipelineCard({ pipeline }: { pipeline: Pipeline }) {
+function PipelineCard({
+  pipeline,
+  projectId,
+}: {
+  pipeline: Pipeline;
+  projectId: string;
+}) {
   const [isExpanded, setIsExpanded] = useState(false);
   const [showRunModal, setShowRunModal] = useState(false);
   const [selectedStep, setSelectedStep] = useState<string | null>(null);
 
+  const { data: runs = [], isLoading: runsLoading } = usePipelineRuns(
+    isExpanded ? projectId : undefined,
+    isExpanded ? pipeline.name : undefined
+  );
+
+  const runPipelineMutation = useRunPipeline();
+
   const handleRunPipeline = (inputs: string) => {
-    console.log(`Running pipeline ${pipeline.name} with inputs:`, inputs);
-    // TODO: Integrate with API
+    try {
+      const parsed = JSON.parse(inputs);
+      runPipelineMutation.mutate(
+        { projectId, name: pipeline.name, inputs: parsed },
+        {
+          onSuccess: () => {
+            setShowRunModal(false);
+          },
+        }
+      );
+    } catch {
+      // JSON parse error handled by modal validation
+    }
   };
 
   const getStatusBadgeVariant = (status: string) => {
@@ -324,13 +182,15 @@ function PipelineCard({ pipeline }: { pipeline: Pipeline }) {
                 <h3 className="text-lg font-semibold text-white">
                   {pipeline.name}
                 </h3>
-                {pipeline.last_run && (
-                  <Badge variant={getStatusBadgeVariant(pipeline.last_run.status)}>
-                    {pipeline.last_run.status}
-                  </Badge>
-                )}
               </div>
-              <p className="text-sm text-eve-400">{pipeline.description}</p>
+              <p className="text-sm text-eve-400">{pipeline.description || 'No description'}</p>
+              {pipeline.triggers && pipeline.triggers.length > 0 && (
+                <div className="flex gap-2 mt-2">
+                  {pipeline.triggers.map((trigger) => (
+                    <Badge key={trigger} variant="default">{trigger}</Badge>
+                  ))}
+                </div>
+              )}
             </div>
             <Button
               onClick={() => setShowRunModal(true)}
@@ -360,11 +220,31 @@ function PipelineCard({ pipeline }: { pipeline: Pipeline }) {
             </Button>
           </div>
 
-          {/* Last Run Info */}
-          {pipeline.last_run && pipeline.last_run.completed_at && (
-            <div className="flex items-center gap-2 text-sm text-eve-300">
+          {/* Steps overview */}
+          {pipeline.steps && pipeline.steps.length > 0 && (
+            <div className="flex items-center gap-2 text-sm text-eve-400">
+              <span>{pipeline.steps.length} steps:</span>
+              <div className="flex items-center gap-1">
+                {pipeline.steps.map((step, idx) => (
+                  <span key={idx}>
+                    <span className="text-eve-300">{step.name}</span>
+                    {idx < pipeline.steps.length - 1 && <span className="text-eve-600 mx-1">&rarr;</span>}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Expandable Runs Section */}
+          <div className="pt-4 border-t border-eve-700">
+            <button
+              onClick={() => setIsExpanded(!isExpanded)}
+              className="flex items-center gap-2 text-sm font-medium text-eve-200 hover:text-white transition-colors"
+            >
               <svg
-                className="w-4 h-4"
+                className={`w-4 h-4 transition-transform ${
+                  isExpanded ? 'rotate-90' : ''
+                }`}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -373,78 +253,67 @@ function PipelineCard({ pipeline }: { pipeline: Pipeline }) {
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   strokeWidth={2}
-                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                  d="M9 5l7 7-7 7"
                 />
               </svg>
-              <span>Last run {formatRelativeTime(pipeline.last_run.completed_at)}</span>
-            </div>
-          )}
+              Recent Runs
+            </button>
 
-          {/* Expandable Runs Section */}
-          {pipeline.runs.length > 0 && (
-            <div className="pt-4 border-t border-eve-700">
-              <button
-                onClick={() => setIsExpanded(!isExpanded)}
-                className="flex items-center gap-2 text-sm font-medium text-eve-200 hover:text-white transition-colors"
-              >
-                <svg
-                  className={`w-4 h-4 transition-transform ${
-                    isExpanded ? 'rotate-90' : ''
-                  }`}
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 5l7 7-7 7"
-                  />
-                </svg>
-                Recent Runs ({pipeline.runs.length})
-              </button>
+            {isExpanded && (
+              <div className="mt-4 space-y-3">
+                {runsLoading && (
+                  <div className="flex items-center justify-center py-4">
+                    <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-eve-500"></div>
+                  </div>
+                )}
 
-              {isExpanded && (
-                <div className="mt-4 space-y-3">
-                  {pipeline.runs.map((run) => (
-                    <div
-                      key={run.id}
-                      className="bg-eve-950/50 rounded-lg border border-eve-700/50 p-4 space-y-3"
-                    >
-                      {/* Run Header */}
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-3">
-                          <Badge variant={getStatusBadgeVariant(run.status)}>
-                            {run.status}
-                          </Badge>
-                          <span className="text-sm text-eve-300 font-mono">
-                            {run.id}
-                          </span>
-                        </div>
-                        <div className="text-sm text-eve-400">
-                          {run.completed_at
-                            ? formatDuration(run.started_at, run.completed_at)
-                            : 'Running...'}
-                        </div>
+                {!runsLoading && runs.length === 0 && (
+                  <p className="text-sm text-eve-400 text-center py-4">No runs yet.</p>
+                )}
+
+                {!runsLoading && runs.map((run: PipelineRun) => (
+                  <div
+                    key={run.id}
+                    className="bg-eve-950/50 rounded-lg border border-eve-700/50 p-4 space-y-3"
+                  >
+                    {/* Run Header */}
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <Badge variant={getStatusBadgeVariant(run.status)}>
+                          {run.status}
+                        </Badge>
+                        <span className="text-sm text-eve-300 font-mono">
+                          {run.id}
+                        </span>
                       </div>
+                      <div className="text-sm text-eve-400">
+                        {run.started_at && run.completed_at
+                          ? formatDuration(run.started_at, run.completed_at)
+                          : run.started_at
+                          ? 'Running...'
+                          : 'Pending'}
+                      </div>
+                    </div>
 
-                      {/* Run Timestamps */}
+                    {/* Run Timestamps */}
+                    {run.started_at && (
                       <div className="flex items-center gap-4 text-xs text-eve-400">
                         <span>Started {formatRelativeTime(run.started_at)}</span>
                         {run.completed_at && (
                           <>
-                            <span>•</span>
+                            <span>&bull;</span>
                             <span>
                               Completed {formatRelativeTime(run.completed_at)}
                             </span>
                           </>
                         )}
                       </div>
+                    )}
 
-                      {/* Steps */}
+                    {/* Steps */}
+                    {run.steps && run.steps.length > 0 && (
                       <div className="space-y-2">
-                        {run.steps.map((step, idx) => (
+                        {run.steps.map((step: PipelineRunStep, idx: number) => (
                           <div
                             key={idx}
                             className={`flex items-center gap-3 p-2 rounded-lg transition-colors ${
@@ -502,7 +371,9 @@ function PipelineCard({ pipeline }: { pipeline: Pipeline }) {
                                   />
                                 </svg>
                               )}
-                              {step.status === 'pending' && (
+                              {step.status !== 'success' &&
+                                step.status !== 'failed' &&
+                                step.status !== 'running' && (
                                 <svg
                                   className="w-5 h-5 text-eve-500"
                                   fill="currentColor"
@@ -562,31 +433,39 @@ function PipelineCard({ pipeline }: { pipeline: Pipeline }) {
                           </div>
                         ))}
                       </div>
+                    )}
 
-                      {/* Step Logs Placeholder */}
-                      {selectedStep && selectedStep.startsWith(run.id) && (
-                        <div className="mt-3 p-3 bg-eve-950 rounded border border-eve-700/50">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs font-medium text-eve-300">
-                              Step Logs
-                            </span>
-                            <span className="text-xs text-eve-500 font-mono">
-                              {selectedStep.split('-')[1]}
-                            </span>
-                          </div>
+                    {/* Step Logs / Error */}
+                    {selectedStep && selectedStep.startsWith(run.id) && (
+                      <div className="mt-3 p-3 bg-eve-950 rounded border border-eve-700/50">
+                        <div className="flex items-center justify-between mb-2">
+                          <span className="text-xs font-medium text-eve-300">
+                            Step Details
+                          </span>
+                          <span className="text-xs text-eve-500 font-mono">
+                            {selectedStep.replace(`${run.id}-`, '')}
+                          </span>
+                        </div>
+                        {run.steps.find(
+                          (s: PipelineRunStep) => `${run.id}-${s.name}` === selectedStep
+                        )?.error ? (
+                          <pre className="text-xs text-error-400 font-mono overflow-x-auto">
+                            {run.steps.find(
+                              (s: PipelineRunStep) => `${run.id}-${s.name}` === selectedStep
+                            )?.error}
+                          </pre>
+                        ) : (
                           <pre className="text-xs text-eve-400 font-mono overflow-x-auto">
                             Log output for this step will appear here...
-                            {'\n'}
-                            [Placeholder - logs integration coming soon]
                           </pre>
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
       </Card>
 
@@ -595,6 +474,7 @@ function PipelineCard({ pipeline }: { pipeline: Pipeline }) {
           pipelineName={pipeline.name}
           onClose={() => setShowRunModal(false)}
           onRun={handleRunPipeline}
+          isRunning={runPipelineMutation.isPending}
         />
       )}
     </>
@@ -604,8 +484,12 @@ function PipelineCard({ pipeline }: { pipeline: Pipeline }) {
 // Main Pipelines Page Component
 export function PipelinesPage() {
   const { currentProject, isLoading: projectLoading } = useProjectContext();
-  const [loading] = useState(false);
-  const pipelines = mockPipelines;
+  const projectId = currentProject?.id?.toString();
+  const {
+    data: pipelines = [],
+    isLoading,
+    error,
+  } = usePipelines(projectId);
 
   if (projectLoading) {
     return (
@@ -638,15 +522,24 @@ export function PipelinesPage() {
         </div>
       </div>
 
+      {/* Error State */}
+      {error && (
+        <div className="bg-error-900/20 border border-error-700 rounded-lg p-4">
+          <p className="text-error-300 text-sm">
+            {error instanceof Error ? error.message : 'Failed to load pipelines'}
+          </p>
+        </div>
+      )}
+
       {/* Loading State */}
-      {loading && (
+      {isLoading && (
         <div className="flex items-center justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-eve-500"></div>
         </div>
       )}
 
       {/* Empty State */}
-      {!loading && pipelines.length === 0 && (
+      {!isLoading && !error && pipelines.length === 0 && (
         <Card>
           <div className="text-center py-12">
             <svg
@@ -673,10 +566,14 @@ export function PipelinesPage() {
       )}
 
       {/* Pipelines List */}
-      {!loading && pipelines.length > 0 && (
+      {!isLoading && !error && pipelines.length > 0 && (
         <div className="grid gap-4">
-          {pipelines.map((pipeline) => (
-            <PipelineCard key={pipeline.name} pipeline={pipeline} />
+          {pipelines.map((pipeline: Pipeline) => (
+            <PipelineCard
+              key={pipeline.name}
+              pipeline={pipeline}
+              projectId={projectId!}
+            />
           ))}
         </div>
       )}

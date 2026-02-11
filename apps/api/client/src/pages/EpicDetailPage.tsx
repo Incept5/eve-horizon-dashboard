@@ -1,70 +1,61 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useQuery } from '@tanstack/react-query';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
-
-interface Job {
-  id: string;
-  subject: string;
-  description?: string;
-  phase: string;
-  status: string;
-  issue_type: 'epic' | 'story' | 'task';
-  parent_id?: string;
-}
-
-// Mock data
-const mockEpic: Job = {
-  id: '1',
-  subject: 'User Authentication',
-  description: 'Implement complete auth flow with login, logout, and session management',
-  phase: 'active',
-  status: 'in_progress',
-  issue_type: 'epic',
-};
-
-const mockChildren: Job[] = [
-  { id: '2', subject: 'Design login form', issue_type: 'story', phase: 'done', status: 'completed', parent_id: '1' },
-  { id: '3', subject: 'Implement JWT validation', issue_type: 'story', phase: 'active', status: 'in_progress', parent_id: '1' },
-  { id: '4', subject: 'Add form validation', issue_type: 'task', phase: 'done', status: 'completed', parent_id: '2' },
-  { id: '5', subject: 'Style login button', issue_type: 'task', phase: 'review', status: 'pending_review', parent_id: '2' },
-  { id: '6', subject: 'Create token refresh logic', issue_type: 'task', phase: 'active', status: 'in_progress', parent_id: '3' },
-  { id: '7', subject: 'Write JWT tests', issue_type: 'task', phase: 'backlog', status: 'pending', parent_id: '3' },
-];
-
-interface TreeNode {
-  job: Job;
-  children: TreeNode[];
-}
+import { getJob, getJobTree } from '../api/jobs';
+import type { Job, JobPhase, JobTreeNode } from '../api/types';
 
 export function EpicDetailPage() {
-  const { epicId: _epicId } = useParams<{ epicId: string }>();
+  const { epicId } = useParams<{ epicId: string }>();
   const navigate = useNavigate();
-  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set(['1', '2', '3']));
+  const [expandedNodes, setExpandedNodes] = useState<Set<string>>(new Set());
 
-  // Build tree structure
-  const buildTree = (jobs: Job[]): TreeNode[] => {
-    const nodeMap = new Map<string, TreeNode>();
-    const rootNodes: TreeNode[] = [];
+  // Fetch the epic job
+  const {
+    data: epic,
+    isLoading: epicLoading,
+    error: epicError,
+  } = useQuery({
+    queryKey: ['jobs', 'detail', epicId],
+    queryFn: () => getJob(epicId!),
+    enabled: !!epicId,
+  });
 
-    // Create nodes for all jobs
-    jobs.forEach((job) => {
-      nodeMap.set(job.id, { job, children: [] });
-    });
+  // Fetch the job tree
+  const {
+    data: jobTree,
+    isLoading: treeLoading,
+    error: treeError,
+  } = useQuery({
+    queryKey: ['jobs', 'tree', epicId],
+    queryFn: () => getJobTree(epicId!),
+    enabled: !!epicId,
+  });
 
-    // Build parent-child relationships
-    jobs.forEach((job) => {
-      const node = nodeMap.get(job.id)!;
-      if (job.parent_id && nodeMap.has(job.parent_id)) {
-        nodeMap.get(job.parent_id)!.children.push(node);
-      } else {
-        rootNodes.push(node);
+  // Auto-expand root on first load
+  const isLoading = epicLoading || treeLoading;
+  const error = epicError || treeError;
+
+  // Flatten tree to get all descendant jobs (for kanban and progress)
+  const allDescendants: Job[] = useMemo(() => {
+    if (!jobTree) return [];
+    const descendants: Job[] = [];
+    const collect = (node: JobTreeNode) => {
+      for (const child of node.children) {
+        descendants.push(child.job);
+        collect(child);
       }
-    });
+    };
+    collect(jobTree);
+    return descendants;
+  }, [jobTree]);
 
-    return rootNodes;
-  };
+  // Calculate progress from descendants
+  const doneCount = allDescendants.filter((j) => j.phase === 'done').length;
+  const totalCount = allDescendants.length;
+  const progress = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
 
   const toggleNode = (nodeId: string) => {
     const newExpanded = new Set(expandedNodes);
@@ -76,8 +67,8 @@ export function EpicDetailPage() {
     setExpandedNodes(newExpanded);
   };
 
-  const getPhaseVariant = (phase: string) => {
-    const phaseMap: Record<string, 'idea' | 'backlog' | 'ready' | 'active' | 'review' | 'done' | 'cancelled'> = {
+  const getPhaseVariant = (phase: string): JobPhase | 'default' => {
+    const phaseMap: Record<string, JobPhase> = {
       idea: 'idea',
       backlog: 'backlog',
       ready: 'ready',
@@ -115,7 +106,7 @@ export function EpicDetailPage() {
   };
 
   // Render tree node recursively
-  const renderTreeNode = (node: TreeNode, depth: number = 0): JSX.Element => {
+  const renderTreeNode = (node: JobTreeNode, depth: number = 0): JSX.Element => {
     const isExpanded = expandedNodes.has(node.job.id);
     const hasChildren = node.children.length > 0;
     const indentWidth = depth * 24;
@@ -161,14 +152,6 @@ export function EpicDetailPage() {
     );
   };
 
-  // Calculate progress
-  const doneCount = mockChildren.filter((j) => j.phase === 'done').length;
-  const totalCount = mockChildren.length;
-  const progress = totalCount > 0 ? Math.round((doneCount / totalCount) * 100) : 0;
-
-  // Build tree with epic as root
-  const treeData = buildTree([mockEpic, ...mockChildren]);
-
   // Group children by phase for kanban
   const groupByPhase = (jobs: Job[]) => {
     return {
@@ -179,7 +162,66 @@ export function EpicDetailPage() {
     };
   };
 
-  const kanbanColumns = groupByPhase(mockChildren);
+  const kanbanColumns = groupByPhase(allDescendants);
+
+  // Loading state
+  if (isLoading) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <Button variant="ghost" onClick={() => navigate('/epics')}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Epics
+          </Button>
+        </div>
+        <div className="flex items-center justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-eve-500"></div>
+        </div>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <Button variant="ghost" onClick={() => navigate('/epics')}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Epics
+          </Button>
+        </div>
+        <div className="bg-error-900/20 border border-error-700 rounded-lg p-4">
+          <p className="text-error-300 text-sm">
+            {error instanceof Error ? error.message : 'Failed to load epic details'}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  // No epic found
+  if (!epic) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <Button variant="ghost" onClick={() => navigate('/epics')}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Epics
+          </Button>
+        </div>
+        <Card>
+          <p className="text-eve-300 text-center py-8">Epic not found.</p>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -198,11 +240,11 @@ export function EpicDetailPage() {
         <div className="space-y-4">
           <div className="flex items-start justify-between gap-4">
             <div className="flex-1">
-              <h1 className="text-3xl font-bold text-white mb-2">{mockEpic.subject}</h1>
-              <p className="text-eve-300">{mockEpic.description}</p>
+              <h1 className="text-3xl font-bold text-white mb-2">{epic.subject}</h1>
+              <p className="text-eve-300">{epic.description || 'No description'}</p>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant={getPhaseVariant(mockEpic.phase)} />
+              <Badge variant={getPhaseVariant(epic.phase)} />
             </div>
           </div>
 
@@ -226,130 +268,134 @@ export function EpicDetailPage() {
       </Card>
 
       {/* Tree view section */}
-      <Card>
-        <div className="space-y-4">
-          <h2 className="text-xl font-semibold text-white">Hierarchy</h2>
-          <div className="space-y-1">
-            {treeData.map((node) => renderTreeNode(node))}
+      {jobTree && (
+        <Card>
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold text-white">Hierarchy</h2>
+            <div className="space-y-1">
+              {renderTreeNode(jobTree)}
+            </div>
           </div>
-        </div>
-      </Card>
+        </Card>
+      )}
 
       {/* Mini Kanban board */}
-      <Card>
-        <div className="space-y-4">
-          <h2 className="text-xl font-semibold text-white">Board View</h2>
-          <div className="grid grid-cols-4 gap-4">
-            {/* Backlog column */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-eve-300 uppercase">Backlog</h3>
-                <span className="text-xs text-eve-500 bg-eve-800 px-2 py-0.5 rounded-full">
-                  {kanbanColumns.backlog.length}
-                </span>
-              </div>
-              <div className="space-y-2">
-                {kanbanColumns.backlog.map((job) => (
-                  <div
-                    key={job.id}
-                    className="bg-eve-900/50 border border-eve-700 rounded p-3 hover:border-eve-600 transition-colors"
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className="text-eve-400">{getIssueTypeIcon(job.issue_type)}</div>
-                      <span className="text-xs text-eve-500 uppercase">{job.issue_type}</span>
+      {allDescendants.length > 0 && (
+        <Card>
+          <div className="space-y-4">
+            <h2 className="text-xl font-semibold text-white">Board View</h2>
+            <div className="grid grid-cols-4 gap-4">
+              {/* Backlog column */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-eve-300 uppercase">Backlog</h3>
+                  <span className="text-xs text-eve-500 bg-eve-800 px-2 py-0.5 rounded-full">
+                    {kanbanColumns.backlog.length}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {kanbanColumns.backlog.map((job: Job) => (
+                    <div
+                      key={job.id}
+                      className="bg-eve-900/50 border border-eve-700 rounded p-3 hover:border-eve-600 transition-colors"
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="text-eve-400">{getIssueTypeIcon(job.issue_type)}</div>
+                        <span className="text-xs text-eve-500 uppercase">{job.issue_type}</span>
+                      </div>
+                      <p className="text-sm text-white">{job.subject}</p>
                     </div>
-                    <p className="text-sm text-white">{job.subject}</p>
-                  </div>
-                ))}
-                {kanbanColumns.backlog.length === 0 && (
-                  <div className="text-xs text-eve-500 text-center py-4">No items</div>
-                )}
+                  ))}
+                  {kanbanColumns.backlog.length === 0 && (
+                    <div className="text-xs text-eve-500 text-center py-4">No items</div>
+                  )}
+                </div>
               </div>
-            </div>
 
-            {/* Active column */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-eve-300 uppercase">Active</h3>
-                <span className="text-xs text-eve-500 bg-eve-800 px-2 py-0.5 rounded-full">
-                  {kanbanColumns.active.length}
-                </span>
-              </div>
-              <div className="space-y-2">
-                {kanbanColumns.active.map((job) => (
-                  <div
-                    key={job.id}
-                    className="bg-amber-900/20 border border-amber-700/50 rounded p-3 hover:border-amber-600 transition-colors"
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className="text-amber-400">{getIssueTypeIcon(job.issue_type)}</div>
-                      <span className="text-xs text-amber-500 uppercase">{job.issue_type}</span>
+              {/* Active column */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-eve-300 uppercase">Active</h3>
+                  <span className="text-xs text-eve-500 bg-eve-800 px-2 py-0.5 rounded-full">
+                    {kanbanColumns.active.length}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {kanbanColumns.active.map((job: Job) => (
+                    <div
+                      key={job.id}
+                      className="bg-amber-900/20 border border-amber-700/50 rounded p-3 hover:border-amber-600 transition-colors"
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="text-amber-400">{getIssueTypeIcon(job.issue_type)}</div>
+                        <span className="text-xs text-amber-500 uppercase">{job.issue_type}</span>
+                      </div>
+                      <p className="text-sm text-white">{job.subject}</p>
                     </div>
-                    <p className="text-sm text-white">{job.subject}</p>
-                  </div>
-                ))}
-                {kanbanColumns.active.length === 0 && (
-                  <div className="text-xs text-eve-500 text-center py-4">No items</div>
-                )}
+                  ))}
+                  {kanbanColumns.active.length === 0 && (
+                    <div className="text-xs text-eve-500 text-center py-4">No items</div>
+                  )}
+                </div>
               </div>
-            </div>
 
-            {/* Review column */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-eve-300 uppercase">Review</h3>
-                <span className="text-xs text-eve-500 bg-eve-800 px-2 py-0.5 rounded-full">
-                  {kanbanColumns.review.length}
-                </span>
-              </div>
-              <div className="space-y-2">
-                {kanbanColumns.review.map((job) => (
-                  <div
-                    key={job.id}
-                    className="bg-orange-900/20 border border-orange-700/50 rounded p-3 hover:border-orange-600 transition-colors"
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className="text-orange-400">{getIssueTypeIcon(job.issue_type)}</div>
-                      <span className="text-xs text-orange-500 uppercase">{job.issue_type}</span>
+              {/* Review column */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-eve-300 uppercase">Review</h3>
+                  <span className="text-xs text-eve-500 bg-eve-800 px-2 py-0.5 rounded-full">
+                    {kanbanColumns.review.length}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {kanbanColumns.review.map((job: Job) => (
+                    <div
+                      key={job.id}
+                      className="bg-orange-900/20 border border-orange-700/50 rounded p-3 hover:border-orange-600 transition-colors"
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="text-orange-400">{getIssueTypeIcon(job.issue_type)}</div>
+                        <span className="text-xs text-orange-500 uppercase">{job.issue_type}</span>
+                      </div>
+                      <p className="text-sm text-white">{job.subject}</p>
                     </div>
-                    <p className="text-sm text-white">{job.subject}</p>
-                  </div>
-                ))}
-                {kanbanColumns.review.length === 0 && (
-                  <div className="text-xs text-eve-500 text-center py-4">No items</div>
-                )}
+                  ))}
+                  {kanbanColumns.review.length === 0 && (
+                    <div className="text-xs text-eve-500 text-center py-4">No items</div>
+                  )}
+                </div>
               </div>
-            </div>
 
-            {/* Done column */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="text-sm font-semibold text-eve-300 uppercase">Done</h3>
-                <span className="text-xs text-eve-500 bg-eve-800 px-2 py-0.5 rounded-full">
-                  {kanbanColumns.done.length}
-                </span>
-              </div>
-              <div className="space-y-2">
-                {kanbanColumns.done.map((job) => (
-                  <div
-                    key={job.id}
-                    className="bg-green-900/20 border border-green-700/50 rounded p-3 hover:border-green-600 transition-colors"
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <div className="text-green-400">{getIssueTypeIcon(job.issue_type)}</div>
-                      <span className="text-xs text-green-500 uppercase">{job.issue_type}</span>
+              {/* Done column */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="text-sm font-semibold text-eve-300 uppercase">Done</h3>
+                  <span className="text-xs text-eve-500 bg-eve-800 px-2 py-0.5 rounded-full">
+                    {kanbanColumns.done.length}
+                  </span>
+                </div>
+                <div className="space-y-2">
+                  {kanbanColumns.done.map((job: Job) => (
+                    <div
+                      key={job.id}
+                      className="bg-green-900/20 border border-green-700/50 rounded p-3 hover:border-green-600 transition-colors"
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="text-green-400">{getIssueTypeIcon(job.issue_type)}</div>
+                        <span className="text-xs text-green-500 uppercase">{job.issue_type}</span>
+                      </div>
+                      <p className="text-sm text-white">{job.subject}</p>
                     </div>
-                    <p className="text-sm text-white">{job.subject}</p>
-                  </div>
-                ))}
-                {kanbanColumns.done.length === 0 && (
-                  <div className="text-xs text-eve-500 text-center py-4">No items</div>
-                )}
+                  ))}
+                  {kanbanColumns.done.length === 0 && (
+                    <div className="text-xs text-eve-500 text-center py-4">No items</div>
+                  )}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </Card>
+        </Card>
+      )}
     </div>
   );
 }

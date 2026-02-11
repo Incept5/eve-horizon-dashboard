@@ -1,0 +1,6 @@
+active_profile: default
+profiles:
+  default:
+    api_url: https://api.eh1.incept5.dev
+    org_id: org_01kfzn79b5fvj8jtgr8stn66gh
+    project_id: proj_01kg4v9hgfeh088cq32jf6vvb8

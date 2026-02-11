@@ -19,18 +19,29 @@ const shortcutCategories: ShortcutCategory[] = [
   {
     title: 'General',
     shortcuts: [
-      { keys: ['⌘', 'K'], description: 'Open command palette' },
+      { keys: ['\u2318', 'K'], description: 'Open command palette' },
       { keys: ['?'], description: 'Show keyboard shortcuts' },
       { keys: ['ESC'], description: 'Close modals and drawers' },
     ],
   },
   {
-    title: 'Navigation',
+    title: 'Navigation \u2014 Work',
     shortcuts: [
       { keys: ['G', 'P'], description: 'Go to Projects' },
       { keys: ['G', 'B'], description: 'Go to Board' },
-      { keys: ['G', 'J'], description: 'Go to Jobs' },
       { keys: ['G', 'E'], description: 'Go to Epics' },
+      { keys: ['G', 'J'], description: 'Go to Jobs' },
+      { keys: ['G', 'R'], description: 'Go to Review' },
+    ],
+  },
+  {
+    title: 'Navigation \u2014 DevOps',
+    shortcuts: [
+      { keys: ['G', 'D'], description: 'Go to Builds' },
+      { keys: ['G', 'I'], description: 'Go to Pipelines' },
+      { keys: ['G', 'W'], description: 'Go to Workflows' },
+      { keys: ['G', 'V'], description: 'Go to Environments' },
+      { keys: ['G', 'S'], description: 'Go to Settings' },
     ],
   },
 ];
@@ -81,7 +92,9 @@ export function ShortcutsHelp({ isOpen, onClose }: ShortcutsHelpProps) {
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-eve-700">
           <div className="flex items-center gap-3">
-            <span className="text-2xl">⌨️</span>
+            <svg className="w-6 h-6 text-eve-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 7.5l3 2.25-3 2.25m4.5 0h3m-9 8.25h13.5A2.25 2.25 0 0021 18V6a2.25 2.25 0 00-2.25-2.25H5.25A2.25 2.25 0 003 6v12a2.25 2.25 0 002.25 2.25z" />
+            </svg>
             <h2 id="shortcuts-title" className="text-xl font-semibold text-white">
               Keyboard Shortcuts
             </h2>

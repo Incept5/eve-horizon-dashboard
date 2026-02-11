@@ -1,118 +1,19 @@
 import { useState, useMemo } from 'react';
+import { useProjectContext } from '../contexts/ProjectContext';
+import { useJobs } from '../hooks';
 import { Card } from '../components/ui/Card';
 import { Badge, PhaseBadge } from '../components/ui/Badge';
 import { Input } from '../components/ui/Input';
-
-// Mock data
-interface Job {
-  id: string;
-  subject: string;
-  issue_type: 'story' | 'task' | 'bug' | 'epic';
-  phase: 'idea' | 'backlog' | 'ready' | 'active' | 'review' | 'done' | 'cancelled';
-  status: string;
-  created_at: string;
-  updated_at: string;
-}
-
-const mockJobs: Job[] = [
-  {
-    id: '1',
-    subject: 'Setup auth flow',
-    issue_type: 'story',
-    phase: 'active',
-    status: 'in_progress',
-    created_at: '2026-01-28T10:00:00Z',
-    updated_at: '2026-01-29T08:00:00Z',
-  },
-  {
-    id: '2',
-    subject: 'Design database schema',
-    issue_type: 'task',
-    phase: 'done',
-    status: 'completed',
-    created_at: '2026-01-27T10:00:00Z',
-    updated_at: '2026-01-28T15:00:00Z',
-  },
-  {
-    id: '3',
-    subject: 'Fix login redirect bug',
-    issue_type: 'bug',
-    phase: 'review',
-    status: 'in_review',
-    created_at: '2026-01-27T14:30:00Z',
-    updated_at: '2026-01-29T09:15:00Z',
-  },
-  {
-    id: '4',
-    subject: 'Implement user dashboard',
-    issue_type: 'story',
-    phase: 'ready',
-    status: 'todo',
-    created_at: '2026-01-26T09:00:00Z',
-    updated_at: '2026-01-28T11:20:00Z',
-  },
-  {
-    id: '5',
-    subject: 'Add API rate limiting',
-    issue_type: 'task',
-    phase: 'backlog',
-    status: 'todo',
-    created_at: '2026-01-25T16:00:00Z',
-    updated_at: '2026-01-26T10:30:00Z',
-  },
-  {
-    id: '6',
-    subject: 'Performance optimization epic',
-    issue_type: 'epic',
-    phase: 'idea',
-    status: 'planning',
-    created_at: '2026-01-24T11:00:00Z',
-    updated_at: '2026-01-27T14:45:00Z',
-  },
-  {
-    id: '7',
-    subject: 'Refactor authentication module',
-    issue_type: 'task',
-    phase: 'active',
-    status: 'in_progress',
-    created_at: '2026-01-28T13:20:00Z',
-    updated_at: '2026-01-29T07:30:00Z',
-  },
-  {
-    id: '8',
-    subject: 'Update dependencies',
-    issue_type: 'task',
-    phase: 'done',
-    status: 'completed',
-    created_at: '2026-01-23T08:00:00Z',
-    updated_at: '2026-01-24T16:00:00Z',
-  },
-  {
-    id: '9',
-    subject: 'Implement search functionality',
-    issue_type: 'story',
-    phase: 'ready',
-    status: 'todo',
-    created_at: '2026-01-26T12:00:00Z',
-    updated_at: '2026-01-28T09:00:00Z',
-  },
-  {
-    id: '10',
-    subject: 'Fix memory leak in worker process',
-    issue_type: 'bug',
-    phase: 'active',
-    status: 'in_progress',
-    created_at: '2026-01-28T15:45:00Z',
-    updated_at: '2026-01-29T08:20:00Z',
-  },
-];
+import type { Job, JobPhase, IssueType } from '../api/types';
 
 type SortField = 'subject' | 'issue_type' | 'phase' | 'status' | 'created_at' | 'updated_at';
 type SortDirection = 'asc' | 'desc';
 
 export function JobsPage() {
-  const [jobs] = useState<Job[]>(mockJobs);
-  const [loading] = useState(false);
+  const { currentProject } = useProjectContext();
+  const projectId = currentProject?.id;
+  const { data: jobs = [], isLoading, error } = useJobs(projectId);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedPhases, setSelectedPhases] = useState<string[]>([]);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
@@ -123,29 +24,21 @@ export function JobsPage() {
 
   // Filter and sort jobs
   const filteredJobs = useMemo(() => {
-    let filtered = jobs.filter((job) => {
-      // Search filter
+    let filtered = jobs.filter((job: Job) => {
       const matchesSearch = job.subject
         .toLowerCase()
         .includes(searchQuery.toLowerCase());
-
-      // Phase filter
       const matchesPhase =
         selectedPhases.length === 0 || selectedPhases.includes(job.phase);
-
-      // Type filter
       const matchesType =
         selectedTypes.length === 0 || selectedTypes.includes(job.issue_type);
-
       return matchesSearch && matchesPhase && matchesType;
     });
 
-    // Sort
-    filtered.sort((a, b) => {
-      let aValue: any = a[sortField];
-      let bValue: any = b[sortField];
+    filtered.sort((a: Job, b: Job) => {
+      let aValue: string | number = a[sortField] ?? '';
+      let bValue: string | number = b[sortField] ?? '';
 
-      // Handle dates
       if (sortField === 'created_at' || sortField === 'updated_at') {
         aValue = new Date(aValue).getTime();
         bValue = new Date(bValue).getTime();
@@ -191,7 +84,6 @@ export function JobsPage() {
 
   const handleRowClick = (job: Job) => {
     console.log('Job clicked:', job.id, job);
-    // TODO: Navigate to job detail page
   };
 
   const formatDate = (dateString: string) => {
@@ -209,11 +101,9 @@ export function JobsPage() {
   };
 
   const getTypeVariant = (
-    type: string
+    type: IssueType
   ): 'default' | 'success' | 'warning' | 'error' | 'info' => {
     switch (type) {
-      case 'bug':
-        return 'error';
       case 'story':
         return 'info';
       case 'epic':
@@ -274,6 +164,20 @@ export function JobsPage() {
     );
   };
 
+  // No project selected
+  if (!currentProject) {
+    return (
+      <div className="space-y-6">
+        <h1 className="text-3xl font-bold text-white">Jobs</h1>
+        <Card>
+          <p className="text-eve-300 text-center py-8">
+            Please select a project to view jobs.
+          </p>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -283,6 +187,15 @@ export function JobsPage() {
           {filteredJobs.length} {filteredJobs.length === 1 ? 'job' : 'jobs'}
         </div>
       </div>
+
+      {/* Error state */}
+      {error && (
+        <div className="bg-error-900/20 border border-error-700 rounded-lg p-4">
+          <p className="text-error-300 text-sm">
+            {error instanceof Error ? error.message : 'Failed to load jobs'}
+          </p>
+        </div>
+      )}
 
       {/* Filters */}
       <Card>
@@ -305,7 +218,7 @@ export function JobsPage() {
               Filter by Phase
             </label>
             <div className="flex flex-wrap gap-2">
-              {['idea', 'backlog', 'ready', 'active', 'review', 'done', 'cancelled'].map(
+              {(['idea', 'backlog', 'ready', 'active', 'review', 'done', 'cancelled'] as JobPhase[]).map(
                 (phase) => (
                   <button
                     key={phase}
@@ -329,7 +242,7 @@ export function JobsPage() {
               Filter by Type
             </label>
             <div className="flex flex-wrap gap-2">
-              {['story', 'task', 'bug', 'epic'].map((type) => (
+              {(['story', 'task', 'epic'] as IssueType[]).map((type) => (
                 <button
                   key={type}
                   onClick={() => toggleType(type)}
@@ -364,7 +277,7 @@ export function JobsPage() {
 
       {/* Table */}
       <Card className="p-0">
-        {loading ? (
+        {isLoading ? (
           <div className="flex items-center justify-center py-12">
             <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-eve-500"></div>
           </div>
@@ -440,7 +353,7 @@ export function JobsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {paginatedJobs.map((job, index) => (
+                  {paginatedJobs.map((job: Job, index: number) => (
                     <tr
                       key={job.id}
                       onClick={() => handleRowClick(job)}

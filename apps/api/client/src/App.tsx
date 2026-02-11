@@ -12,6 +12,10 @@ import { PipelinesPage } from './pages/PipelinesPage';
 import { EnvironmentsPage } from './pages/EnvironmentsPage';
 import { ReviewPage } from './pages/ReviewPage';
 import { SystemPage } from './pages/SystemPage';
+import { BuildsPage } from './pages/BuildsPage';
+import { WorkflowsPage } from './pages/WorkflowsPage';
+import { ProjectSettingsPage } from './pages/ProjectSettingsPage';
+import { OrgDetailPage } from './pages/OrgDetailPage';
 
 function App() {
   return (
@@ -34,9 +38,13 @@ function App() {
           <Route path="/epics" element={<EpicsPage />} />
           <Route path="/epics/:epicId" element={<EpicDetailPage />} />
           <Route path="/jobs" element={<JobsPage />} />
-          <Route path="/pipelines" element={<PipelinesPage />} />
-          <Route path="/environments" element={<EnvironmentsPage />} />
           <Route path="/review" element={<ReviewPage />} />
+          <Route path="/builds" element={<BuildsPage />} />
+          <Route path="/pipelines" element={<PipelinesPage />} />
+          <Route path="/workflows" element={<WorkflowsPage />} />
+          <Route path="/environments" element={<EnvironmentsPage />} />
+          <Route path="/settings" element={<ProjectSettingsPage />} />
+          <Route path="/orgs/:orgId" element={<OrgDetailPage />} />
 
           {/* Admin-only routes */}
           <Route element={<AdminRoute />}>

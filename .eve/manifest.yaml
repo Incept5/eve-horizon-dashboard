@@ -1,12 +1,11 @@
 # Eve Horizon Dashboard Manifest
-schema: eve/compose/v2
+schema: eve/compose/v1
 project: eve-horizon-dashboard
 
 x-eve:
   defaults:
     env: staging
-    hints:
-      harness: mclaude
+    harness: mclaude
   requires:
     secrets:
       - GHCR_USERNAME
@@ -21,9 +20,9 @@ registry:
 
 environments:
   test:
-    type: persistent
+    pipeline: deploy
   staging:
-    type: persistent
+    pipeline: deploy
 
 services:
   dashboard:
@@ -44,6 +43,8 @@ services:
 pipelines:
   deploy:
     steps:
+      - name: build
+        action: { type: build }
       - name: deploy
-        action:
-          type: deploy
+        depends_on: [build]
+        action: { type: deploy }

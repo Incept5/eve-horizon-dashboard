@@ -200,3 +200,188 @@ export interface PipelineRunStep {
   output_json?: unknown;
   error?: string;
 }
+
+// --- Organization request/response types ---
+
+export interface CreateOrgRequest {
+  name: string;
+  slug?: string;
+}
+
+export interface UpdateOrgRequest {
+  name?: string;
+}
+
+export interface OrgMember {
+  user_id: string;
+  email: string;
+  role: 'owner' | 'admin' | 'member';
+  created_at?: string;
+}
+
+export interface AddOrgMemberRequest {
+  email: string;
+  role: 'admin' | 'member';
+}
+
+// --- Project request/response types ---
+
+export interface CreateProjectRequest {
+  name: string;
+  slug: string;
+  repo_url: string;
+  branch?: string;
+}
+
+export interface UpdateProjectRequest {
+  name?: string;
+  repo_url?: string;
+  branch?: string;
+}
+
+export interface ProjectMember {
+  user_id: string;
+  email: string;
+  role: 'owner' | 'admin' | 'member';
+  created_at?: string;
+}
+
+export interface AddProjectMemberRequest {
+  email: string;
+  role: 'admin' | 'member';
+}
+
+// --- Secrets ---
+
+export type SecretScope = 'system' | 'org' | 'user' | 'project';
+
+export interface Secret {
+  id: string;
+  scope_type: SecretScope;
+  scope_id: string;
+  key: string;
+  type?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CreateSecretRequest {
+  key: string;
+  value: string;
+  type?: string;
+}
+
+export interface SecretValidationResult {
+  valid: boolean;
+  missing: string[];
+  present: string[];
+}
+
+// --- Builds ---
+
+export interface Build {
+  id: string;
+  project_id: string;
+  ref: string;
+  manifest_hash?: string;
+  services?: string[];
+  status?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface BuildRun {
+  id: string;
+  build_id: string;
+  status: 'pending' | 'running' | 'success' | 'failed' | 'cancelled';
+  started_at?: string;
+  completed_at?: string;
+  error?: string;
+}
+
+export interface BuildArtifact {
+  id: string;
+  build_id: string;
+  service: string;
+  image: string;
+  digest?: string;
+  created_at?: string;
+}
+
+// --- Workflows ---
+
+export interface Workflow {
+  name: string;
+  description?: string;
+  triggers?: string[];
+  steps?: WorkflowStep[];
+}
+
+export interface WorkflowStep {
+  name: string;
+  action: string;
+  inputs?: Record<string, unknown>;
+}
+
+export interface WorkflowRun {
+  id: string;
+  workflow_name: string;
+  status: string;
+  started_at?: string;
+  completed_at?: string;
+  result?: unknown;
+}
+
+// --- Events ---
+
+export interface ProjectEvent {
+  id: string;
+  project_id: string;
+  type: string;
+  source?: string;
+  status?: string;
+  payload?: Record<string, unknown>;
+  created_at: string;
+}
+
+export interface EmitEventRequest {
+  type: string;
+  source?: string;
+  payload?: Record<string, unknown>;
+}
+
+// --- Harnesses ---
+
+export interface Harness {
+  name: string;
+  aliases?: string[];
+  variants?: string[];
+  auth_status?: string;
+  description?: string;
+  capabilities?: string[];
+}
+
+// --- System ---
+
+export interface SystemHealth {
+  status: string;
+  database?: string;
+  details?: Record<string, unknown>;
+}
+
+export interface InviteUserRequest {
+  email: string;
+  github_username?: string;
+  org_id?: string;
+}
+
+// --- Paginated response wrapper ---
+
+export interface PaginatedResponse<T> {
+  data: T[];
+  pagination: {
+    limit: number;
+    offset: number;
+    count: number;
+  };
+}

@@ -1,106 +1,31 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Card } from '../components/ui/Card';
 import { Button } from '../components/ui/Button';
 import { Badge } from '../components/ui/Badge';
 import { Input } from '../components/ui/Input';
-import { getOrgs, getOrgMembers, getSystemEvents } from '../api';
-import type { Organization, Member, SystemEvent } from '../api';
+import { Modal, ModalFooter } from '../components/ui/Modal';
+import {
+  useSystemHealth,
+  useHarnesses,
+  useInviteUser,
+} from '../hooks/useSystem';
+import { useOrgs, useCreateOrg } from '../hooks/useOrgs';
+import { getSystemEvents } from '../api/system';
+import type { Organization, SystemEvent, Harness, InviteUserRequest } from '../api/types';
 
-type TabType = 'organizations' | 'members' | 'events';
+type TabType = 'health' | 'organizations' | 'users' | 'harnesses' | 'events';
+
+const tabs: { id: TabType; label: string }[] = [
+  { id: 'health', label: 'Health' },
+  { id: 'organizations', label: 'Organizations' },
+  { id: 'users', label: 'Users' },
+  { id: 'harnesses', label: 'Harnesses' },
+  { id: 'events', label: 'Events' },
+];
 
 export function SystemPage() {
-  const [activeTab, setActiveTab] = useState<TabType>('organizations');
-  const [orgs, setOrgs] = useState<Organization[]>([]);
-  const [members, setMembers] = useState<Member[]>([]);
-  const [events, setEvents] = useState<SystemEvent[]>([]);
-  const [selectedOrgId, setSelectedOrgId] = useState<number | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-
-  // Load organizations
-  useEffect(() => {
-    if (activeTab === 'organizations') {
-      loadOrgs();
-    }
-  }, [activeTab]);
-
-  // Load members when org is selected
-  useEffect(() => {
-    if (activeTab === 'members' && selectedOrgId) {
-      loadMembers(selectedOrgId);
-    }
-  }, [activeTab, selectedOrgId]);
-
-  // Load events
-  useEffect(() => {
-    if (activeTab === 'events') {
-      loadEvents();
-    }
-  }, [activeTab]);
-
-  const loadOrgs = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await getOrgs();
-      setOrgs(data);
-      // Auto-select first org for members tab
-      if (data.length > 0 && !selectedOrgId) {
-        setSelectedOrgId(data[0].id);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load organizations');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadMembers = async (orgId: number) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await getOrgMembers(orgId);
-      setMembers(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load members');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadEvents = async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const data = await getSystemEvents();
-      setEvents(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load events');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const filteredOrgs = orgs.filter((org) =>
-    org.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    org.slug.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const filteredMembers = members.filter((member) =>
-    member.email.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const filteredEvents = events.filter((event) =>
-    event.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
-    event.message.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const tabs: { id: TabType; label: string }[] = [
-    { id: 'organizations', label: 'Organizations' },
-    { id: 'members', label: 'Members' },
-    { id: 'events', label: 'Events' },
-  ];
+  const [activeTab, setActiveTab] = useState<TabType>('health');
 
   return (
     <div className="space-y-6">
@@ -114,11 +39,7 @@ export function SystemPage() {
           {tabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => {
-                setActiveTab(tab.id);
-                setSearchQuery('');
-                setError(null);
-              }}
+              onClick={() => setActiveTab(tab.id)}
               className={`
                 py-4 px-1 border-b-2 font-medium text-sm transition-colors
                 ${
@@ -134,233 +55,423 @@ export function SystemPage() {
         </nav>
       </div>
 
-      {/* Search bar */}
+      {/* Tab content */}
+      {activeTab === 'health' && <HealthTab />}
+      {activeTab === 'organizations' && <OrganizationsTab />}
+      {activeTab === 'users' && <UsersTab />}
+      {activeTab === 'harnesses' && <HarnessesTab />}
+      {activeTab === 'events' && <EventsTab />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Health Tab
+// ---------------------------------------------------------------------------
+
+function HealthTab() {
+  const { data: health, isLoading, error } = useSystemHealth();
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-eve-500" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <div className="flex items-center gap-3 text-error-400">
+          <svg className="w-5 h-5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={1.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+          </svg>
+          <p className="text-sm">Failed to load system health.</p>
+        </div>
+      </Card>
+    );
+  }
+
+  const isHealthy = health?.status === 'ok' || health?.status === 'healthy';
+  const dbStatus = health?.database ?? 'unknown';
+  const details = health?.details ?? {};
+
+  return (
+    <div className="space-y-6">
+      {/* Overall status */}
+      <Card>
+        <div className="flex items-center gap-4">
+          <span
+            className={`inline-block h-4 w-4 rounded-full ${
+              isHealthy ? 'bg-success-500 shadow-[0_0_8px_rgba(34,197,94,0.5)]' : 'bg-error-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]'
+            }`}
+          />
+          <div>
+            <h2 className="text-lg font-semibold text-white">
+              System {isHealthy ? 'Healthy' : 'Unhealthy'}
+            </h2>
+            <p className="text-sm text-eve-400 mt-0.5">
+              Status: <span className="text-eve-200">{health?.status ?? 'unknown'}</span>
+            </p>
+          </div>
+        </div>
+      </Card>
+
+      {/* Database */}
+      <Card>
+        <h3 className="text-sm font-semibold text-eve-300 uppercase tracking-wider mb-3">Database</h3>
+        <div className="flex items-center gap-3">
+          <span
+            className={`inline-block h-3 w-3 rounded-full ${
+              dbStatus === 'ok' || dbStatus === 'connected'
+                ? 'bg-success-500'
+                : dbStatus === 'unknown'
+                ? 'bg-eve-500'
+                : 'bg-error-500'
+            }`}
+          />
+          <span className="text-eve-200 text-sm capitalize">{dbStatus}</span>
+        </div>
+      </Card>
+
+      {/* Additional details */}
+      {Object.keys(details).length > 0 && (
+        <Card>
+          <h3 className="text-sm font-semibold text-eve-300 uppercase tracking-wider mb-3">Details</h3>
+          <div className="space-y-2">
+            {Object.entries(details).map(([key, value]) => (
+              <div key={key} className="flex items-center justify-between py-1">
+                <span className="text-sm text-eve-400">{key}</span>
+                <span className="text-sm text-eve-200">{String(value)}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Organizations Tab
+// ---------------------------------------------------------------------------
+
+function OrganizationsTab() {
+  const { data: orgs, isLoading, error } = useOrgs();
+  const createOrg = useCreateOrg();
+  const navigate = useNavigate();
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newOrgName, setNewOrgName] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const handleCreateOrg = () => {
+    if (!newOrgName.trim()) return;
+    createOrg.mutate(
+      { name: newOrgName.trim() },
+      {
+        onSuccess: () => {
+          setShowCreateModal(false);
+          setNewOrgName('');
+        },
+      }
+    );
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-eve-500" />
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <Card>
+        <p className="text-error-400 text-sm">Failed to load organizations.</p>
+      </Card>
+    );
+  }
+
+  const filteredOrgs = (orgs ?? []).filter(
+    (org: Organization) =>
+      org.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      org.slug.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  return (
+    <>
       <div className="flex items-center gap-4">
         <Input
           type="text"
-          placeholder={`Search ${activeTab}...`}
+          placeholder="Search organizations..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
           className="max-w-md"
         />
-        {activeTab === 'members' && orgs.length > 0 && (
-          <select
-            value={selectedOrgId || ''}
-            onChange={(e) => setSelectedOrgId(Number(e.target.value))}
-            className="px-4 py-2 bg-eve-900 border border-eve-700 rounded-lg text-white hover:border-eve-600 focus:outline-none focus:ring-2 focus:ring-eve-600"
-          >
-            {orgs.map((org) => (
-              <option key={org.id} value={org.id}>
-                {org.name}
-              </option>
-            ))}
-          </select>
-        )}
+        <Button onClick={() => setShowCreateModal(true)}>
+          Create Organization
+        </Button>
       </div>
 
-      {/* Error state */}
-      {error && (
-        <div className="bg-error-900/20 border border-error-700 rounded-lg p-4">
-          <p className="text-error-300 text-sm">{error}</p>
+      {filteredOrgs.length === 0 ? (
+        <Card>
+          <p className="text-eve-300 text-center py-8">No organizations found.</p>
+        </Card>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {filteredOrgs.map((org: Organization) => (
+            <Card
+              key={org.id}
+              className="cursor-pointer hover:border-eve-600 transition-colors"
+              onClick={() => navigate(`/orgs/${org.id}`)}
+            >
+              <div className="space-y-3">
+                <div>
+                  <h3 className="text-lg font-semibold text-white">{org.name}</h3>
+                  <p className="text-sm text-eve-400">/{org.slug}</p>
+                </div>
+                <div className="pt-3 border-t border-eve-700">
+                  <span className="text-xs text-eve-400">
+                    Click to view details
+                  </span>
+                </div>
+              </div>
+            </Card>
+          ))}
         </div>
       )}
 
-      {/* Tab content */}
-      {activeTab === 'organizations' && (
-        <OrganizationsTab
-          orgs={filteredOrgs}
-          loading={loading}
-          members={members}
-        />
-      )}
+      {/* Create Organization Modal */}
+      <Modal
+        isOpen={showCreateModal}
+        onClose={() => { setShowCreateModal(false); setNewOrgName(''); }}
+        title="Create Organization"
+        size="sm"
+      >
+        <div className="space-y-4">
+          <Input
+            label="Organization Name"
+            placeholder="My Organization"
+            value={newOrgName}
+            onChange={(e) => setNewOrgName(e.target.value)}
+            fullWidth
+            error={createOrg.isError ? 'Failed to create organization. Please try again.' : undefined}
+          />
+          <ModalFooter>
+            <Button
+              variant="secondary"
+              onClick={() => { setShowCreateModal(false); setNewOrgName(''); }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleCreateOrg}
+              loading={createOrg.isPending}
+              disabled={!newOrgName.trim()}
+            >
+              Create
+            </Button>
+          </ModalFooter>
+        </div>
+      </Modal>
+    </>
+  );
+}
 
-      {activeTab === 'members' && (
-        <MembersTab
-          members={filteredMembers}
-          loading={loading}
-        />
-      )}
+// ---------------------------------------------------------------------------
+// Users Tab (replaces Members)
+// ---------------------------------------------------------------------------
 
-      {activeTab === 'events' && (
-        <EventsTab
-          events={filteredEvents}
-          loading={loading}
-        />
-      )}
+function UsersTab() {
+  const inviteUser = useInviteUser();
+  const [email, setEmail] = useState('');
+  const [githubUsername, setGithubUsername] = useState('');
+  const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+
+  const handleInvite = () => {
+    if (!email.trim()) return;
+    const data: InviteUserRequest = { email: email.trim() };
+    if (githubUsername.trim()) {
+      data.github_username = githubUsername.trim();
+    }
+    inviteUser.mutate(data, {
+      onSuccess: () => {
+        setFeedback({ type: 'success', message: `Invitation sent to ${email}.` });
+        setEmail('');
+        setGithubUsername('');
+      },
+      onError: (err) => {
+        setFeedback({
+          type: 'error',
+          message: err instanceof Error ? err.message : 'Failed to invite user.',
+        });
+      },
+    });
+  };
+
+  return (
+    <div className="space-y-6">
+      <Card>
+        <h3 className="text-lg font-semibold text-white mb-4">Invite User</h3>
+        <div className="space-y-4 max-w-lg">
+          <Input
+            label="Email Address"
+            type="email"
+            placeholder="user@example.com"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            fullWidth
+          />
+          <Input
+            label="GitHub Username (optional)"
+            type="text"
+            placeholder="octocat"
+            value={githubUsername}
+            onChange={(e) => setGithubUsername(e.target.value)}
+            fullWidth
+          />
+          <Button
+            onClick={handleInvite}
+            loading={inviteUser.isPending}
+            disabled={!email.trim()}
+          >
+            Invite
+          </Button>
+
+          {feedback && (
+            <div
+              className={`rounded-lg p-3 text-sm ${
+                feedback.type === 'success'
+                  ? 'bg-success-900/20 border border-success-700 text-success-300'
+                  : 'bg-error-900/20 border border-error-700 text-error-300'
+              }`}
+            >
+              {feedback.message}
+            </div>
+          )}
+        </div>
+      </Card>
     </div>
   );
 }
 
-// Organizations Tab Component
-function OrganizationsTab({
-  orgs,
-  loading,
-  members,
-}: {
-  orgs: Organization[];
-  loading: boolean;
-  members: Member[];
-}) {
-  if (loading) {
+// ---------------------------------------------------------------------------
+// Harnesses Tab
+// ---------------------------------------------------------------------------
+
+function HarnessesTab() {
+  const { data: harnesses, isLoading, error } = useHarnesses();
+
+  if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-eve-500"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-eve-500" />
       </div>
     );
   }
 
-  if (orgs.length === 0) {
+  if (error) {
     return (
       <Card>
-        <p className="text-eve-300 text-center py-8">
-          No organizations found.
-        </p>
+        <p className="text-error-400 text-sm">Failed to load harnesses.</p>
       </Card>
     );
   }
+
+  const items: Harness[] = harnesses ?? [];
+
+  if (items.length === 0) {
+    return (
+      <Card>
+        <p className="text-eve-300 text-center py-8">No harnesses found.</p>
+      </Card>
+    );
+  }
+
+  const authBadgeVariant = (status?: string): 'success' | 'warning' | 'default' => {
+    if (status === 'ready' || status === 'configured') return 'success';
+    if (status === 'missing' || status === 'unconfigured') return 'warning';
+    return 'default';
+  };
 
   return (
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-      {orgs.map((org) => {
-        const orgMemberCount = members.filter((m) => m.org_id === org.id).length;
-        return (
-          <Card key={org.id}>
-            <div className="space-y-3">
-              <div className="flex items-start justify-between">
-                <div>
-                  <h3 className="text-lg font-semibold text-white">
-                    {org.name}
-                  </h3>
-                  <p className="text-sm text-eve-400">/{org.slug}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 text-sm text-eve-300">
-                <svg
-                  className="w-4 h-4"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"
-                  />
-                </svg>
-                <span>{orgMemberCount} members</span>
-              </div>
-              <div className="pt-3 border-t border-eve-700">
-                <Button variant="ghost" size="sm" fullWidth>
-                  View Details
-                </Button>
-              </div>
+      {items.map((harness) => (
+        <Card key={harness.name}>
+          <div className="space-y-3">
+            <div className="flex items-start justify-between">
+              <h3 className="text-lg font-bold text-white">{harness.name}</h3>
+              {harness.auth_status && (
+                <Badge variant={authBadgeVariant(harness.auth_status)}>
+                  {harness.auth_status}
+                </Badge>
+              )}
             </div>
-          </Card>
-        );
-      })}
+            {harness.description && (
+              <p className="text-sm text-eve-300">{harness.description}</p>
+            )}
+            {harness.aliases && harness.aliases.length > 0 && (
+              <p className="text-xs text-eve-400">
+                Aliases: {harness.aliases.join(', ')}
+              </p>
+            )}
+            {harness.variants && harness.variants.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {harness.variants.map((variant) => (
+                  <Badge key={variant} variant="default">
+                    {variant}
+                  </Badge>
+                ))}
+              </div>
+            )}
+          </div>
+        </Card>
+      ))}
     </div>
   );
 }
 
-// Members Tab Component
-function MembersTab({
-  members,
-  loading,
-}: {
-  members: Member[];
-  loading: boolean;
-}) {
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-eve-500"></div>
-      </div>
-    );
-  }
+// ---------------------------------------------------------------------------
+// Events Tab (legacy, kept working with getSystemEvents)
+// ---------------------------------------------------------------------------
 
-  if (members.length === 0) {
-    return (
-      <Card>
-        <p className="text-eve-300 text-center py-8">
-          No members found.
-        </p>
-      </Card>
-    );
-  }
+function EventsTab() {
+  const [events, setEvents] = useState<SystemEvent[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  return (
-    <Card>
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="border-b border-eve-700">
-              <th className="text-left py-3 px-4 text-sm font-semibold text-eve-200">
-                Email
-              </th>
-              <th className="text-left py-3 px-4 text-sm font-semibold text-eve-200">
-                Role
-              </th>
-              <th className="text-left py-3 px-4 text-sm font-semibold text-eve-200">
-                Joined
-              </th>
-              <th className="text-right py-3 px-4 text-sm font-semibold text-eve-200">
-                Actions
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {members.map((member) => (
-              <tr key={member.id} className="border-b border-eve-700/50 hover:bg-eve-800/30">
-                <td className="py-3 px-4 text-sm text-white">
-                  {member.email}
-                </td>
-                <td className="py-3 px-4">
-                  <Badge variant={member.role === 'admin' ? 'warning' : 'default'}>
-                    {member.role}
-                  </Badge>
-                </td>
-                <td className="py-3 px-4 text-sm text-eve-300">
-                  {member.created_at
-                    ? new Date(member.created_at).toLocaleDateString()
-                    : 'N/A'}
-                </td>
-                <td className="py-3 px-4 text-right">
-                  <Button variant="ghost" size="sm">
-                    Edit
-                  </Button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Card>
+  // Load events on mount
+  useEffect(() => {
+    setLoading(true);
+    getSystemEvents()
+      .then((data) => setEvents(data))
+      .catch((err) =>
+        setError(err instanceof Error ? err.message : 'Failed to load events')
+      )
+      .finally(() => setLoading(false));
+  }, []);
+
+  const filteredEvents = events.filter(
+    (event) =>
+      event.type.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      event.message.toLowerCase().includes(searchQuery.toLowerCase())
   );
-}
 
-// Events Tab Component
-function EventsTab({
-  events,
-  loading,
-}: {
-  events: SystemEvent[];
-  loading: boolean;
-}) {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-eve-500"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-eve-500" />
       </div>
     );
   }
 
-  if (events.length === 0) {
+  if (error) {
     return (
       <Card>
-        <p className="text-eve-300 text-center py-8">
-          No events found.
-        </p>
+        <p className="text-error-400 text-sm">{error}</p>
       </Card>
     );
   }
@@ -373,29 +484,41 @@ function EventsTab({
   };
 
   return (
-    <Card>
-      <div className="space-y-3 max-h-[600px] overflow-y-auto">
-        {events.map((event) => (
-          <div
-            key={event.id}
-            className="flex items-start gap-4 p-4 rounded-lg bg-eve-900/50 border border-eve-700/50 hover:border-eve-600 transition-colors"
-          >
-            <div className="flex-shrink-0 mt-1">
-              <Badge variant={getEventVariant(event.type)}>
-                {event.type}
-              </Badge>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm text-white break-words">
-                {event.message}
-              </p>
-              <p className="text-xs text-eve-400 mt-1">
-                {new Date(event.created_at).toLocaleString()}
-              </p>
-            </div>
+    <div className="space-y-4">
+      <Input
+        type="text"
+        placeholder="Search events..."
+        value={searchQuery}
+        onChange={(e) => setSearchQuery(e.target.value)}
+        className="max-w-md"
+      />
+
+      {filteredEvents.length === 0 ? (
+        <Card>
+          <p className="text-eve-300 text-center py-8">No events found.</p>
+        </Card>
+      ) : (
+        <Card>
+          <div className="space-y-3 max-h-[600px] overflow-y-auto">
+            {filteredEvents.map((event) => (
+              <div
+                key={event.id}
+                className="flex items-start gap-4 p-4 rounded-lg bg-eve-900/50 border border-eve-700/50 hover:border-eve-600 transition-colors"
+              >
+                <div className="flex-shrink-0 mt-1">
+                  <Badge variant={getEventVariant(event.type)}>{event.type}</Badge>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-white break-words">{event.message}</p>
+                  <p className="text-xs text-eve-400 mt-1">
+                    {new Date(event.created_at).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
-    </Card>
+        </Card>
+      )}
+    </div>
   );
 }
