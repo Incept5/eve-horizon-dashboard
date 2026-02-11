@@ -74,9 +74,11 @@ async function request<T>(
     );
   }
 
-  // Handle 401 Unauthorized by clearing auth state
+  // Handle 401 Unauthorized by clearing auth state (only if we sent a token)
   if (response.status === 401) {
-    clearToken();
+    if (token) {
+      clearToken();
+    }
     throw new ApiClientError(
       'Unauthorized: Please log in again',
       401
