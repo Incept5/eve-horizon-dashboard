@@ -32,7 +32,6 @@ services:
     ports: [3000]
     environment:
       NODE_ENV: production
-      EVE_API_URL: https://api.eh1.incept5.dev
     healthcheck:
       test: curl -f http://localhost:3000/health || exit 1
     x-eve:

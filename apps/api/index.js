@@ -5,7 +5,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const PORT = process.env.PORT || 3000;
-const EVE_API_URL = process.env.EVE_API_URL || 'http://api.eve.lvh.me';
+const EVE_API_URL = process.env.EVE_PUBLIC_API_URL || process.env.EVE_API_URL || 'http://api.eve.lvh.me';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DIST_DIR = path.join(__dirname, 'dist');
