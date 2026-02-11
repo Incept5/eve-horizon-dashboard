@@ -28,7 +28,7 @@ services:
   dashboard:
     build:
       context: apps/api
-    image: ghcr.io/incept5/eve-horizon-dashboard:latest
+    image: ghcr.io/incept5/eve-horizon-dashboard
     ports: [3000]
     environment:
       NODE_ENV: production
