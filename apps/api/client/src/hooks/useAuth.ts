@@ -3,22 +3,34 @@
  */
 
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { post } from '../api/client';
+import { get } from '../api/client';
 import { setToken, clearToken, isAuthenticated } from '../api/auth';
-import type { LoginRequest, LoginResponse, User } from '../api/types';
+import type { User } from '../api/types';
+
+interface AuthMeResponse {
+  auth_enabled: boolean;
+  authenticated: boolean;
+  user_id: string;
+  email: string;
+  role: string;
+  is_admin: boolean;
+  permissions: string[];
+}
 
 /**
  * Get the current user from the API
  */
 async function getCurrentUser(): Promise<User> {
-  return post<User>('/auth/me');
-}
-
-/**
- * Login with email and password
- */
-async function login(credentials: LoginRequest): Promise<LoginResponse> {
-  return post<LoginResponse>('/auth/login', credentials);
+  const resp = await get<AuthMeResponse>('/auth/me');
+  if (!resp.authenticated) {
+    throw new Error('Not authenticated');
+  }
+  return {
+    id: resp.user_id as unknown as number,
+    email: resp.email,
+    is_admin: resp.is_admin,
+    role: resp.is_admin ? 'admin' : 'member',
+  };
 }
 
 /**
@@ -48,12 +60,18 @@ export function useAuth() {
     retry: false,
   });
 
-  // Mutation for login
+  // Mutation for login (token-based)
   const loginMutation = useMutation({
-    mutationFn: login,
-    onSuccess: (data) => {
-      setToken(data.token);
-      queryClient.setQueryData(['auth', 'user'], data.user);
+    mutationFn: async (token: string) => {
+      setToken(token);
+      const user = await getCurrentUser();
+      return user;
+    },
+    onSuccess: (user) => {
+      queryClient.setQueryData(['auth', 'user'], user);
+    },
+    onError: () => {
+      clearToken();
     },
   });
 

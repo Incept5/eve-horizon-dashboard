@@ -11,7 +11,7 @@ import {
   useCallback,
   type ReactNode,
 } from 'react';
-import { post } from '../api/client';
+import { get } from '../api/client';
 import { setToken as storeToken, clearToken, getToken } from '../api/auth';
 import type { User } from '../api/types';
 
@@ -34,8 +34,27 @@ interface AuthProviderProps {
 /**
  * Get the current user from the API
  */
+interface AuthMeResponse {
+  auth_enabled: boolean;
+  authenticated: boolean;
+  user_id: string;
+  email: string;
+  role: string;
+  is_admin: boolean;
+  permissions: string[];
+}
+
 async function getCurrentUser(): Promise<User> {
-  return post<User>('/auth/me');
+  const resp = await get<AuthMeResponse>('/auth/me');
+  if (!resp.authenticated) {
+    throw new Error('Not authenticated');
+  }
+  return {
+    id: resp.user_id as unknown as number,
+    email: resp.email,
+    is_admin: resp.is_admin,
+    role: resp.is_admin ? 'admin' : 'member',
+  };
 }
 
 /**
