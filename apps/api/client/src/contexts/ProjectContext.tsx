@@ -12,7 +12,7 @@ import {
   type ReactNode,
 } from 'react';
 import { get } from '../api/client';
-import type { Project, ProjectListResponse } from '../api/types';
+import type { Project, PaginatedResponse } from '../api/types';
 
 const STORAGE_KEY = 'eve_current_project';
 
@@ -35,8 +35,8 @@ interface ProjectProviderProps {
  * Fetch all projects from the API
  */
 async function fetchProjects(): Promise<Project[]> {
-  const response = await get<ProjectListResponse>('/projects');
-  return response.projects;
+  const response = await get<PaginatedResponse<Project>>('/projects');
+  return response.data;
 }
 
 /**
@@ -65,8 +65,7 @@ export function ProjectProvider({ children }: ProjectProviderProps) {
       let selectedProject: Project | null = null;
 
       if (storedProjectId) {
-        const projectId = parseInt(storedProjectId, 10);
-        selectedProject = fetchedProjects.find(p => p.id === projectId) || null;
+        selectedProject = fetchedProjects.find(p => String(p.id) === storedProjectId) || null;
       }
 
       // Auto-select first project if none selected or stored selection is invalid
